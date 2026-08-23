@@ -40,20 +40,30 @@ AI Time Run 是一个面向长周期自主智能体的运行时，吸收 Anthrop
 ## 工作流
 
 ```mermaid
-flowchart LR
-  M[Mission] --> P[Planner]
-  P --> G[Generator]
-  G --> C[Critic / Constitution]
-  C -->|reject| G
-  C -->|ok| A[Authority Gate]
-  A --> S[Sandbox Effect]
-  S --> E[Evaluator Probe]
-  E -->|evidence ok| B[Belief + Commit]
-  E -->|fail| R[Rollback]
-  O[Oversight] -.-> M
-  O -.-> A
-  O -.-> E
+flowchart TB
+  P0["Principal<br/>mission.created<br/>意图契约 + 能力边界"] --> I0["Initializer<br/>feature.registered(默认失败)<br/>progress + init commit"]
+  I0 --> S0{"Session<br/>summarize / slice<br/>有未通过功能?"}
+  S0 -->|no| D0["停机 / 结束"]
+  S0 -->|yes| PL0["Planner<br/>plan.recorded + claim.recorded"]
+  PL0 --> G0["Generator<br/>candidate.proposed"]
+  G0 --> C0{"Critic / Constitution<br/>critique.recorded<br/>符合原则?"}
+  C0 -->|revision.requested| G0
+  C0 -->|ok| A0{"Authority<br/>canAct + approval gate"}
+  A0 -->|无授权 / 审批拒绝| DENY0["拒绝"]
+  A0 -->|通过| E0["Sandbox<br/>checkpoint -> actualized"]
+  E0 -->|工具异常| RB0["rollback + effect.reverted"]
+  E0 -->|成功| V0["Evaluator<br/>probe -> evidence + evaluation"]
+  V0 -->|失败| RB0
+  V0 -->|通过| FE0["effect.verified<br/>feature.updated(pass)"]
+  FE0 --> B0["Belief.asserted<br/>progress + episodic + artifacts"]
+  B0 --> S0
+  O0["Oversight<br/>metrics + blindSpots"] -.-> PL0
+  O0 -.-> A0
+  O0 -.-> V0
 ```
+
+完整大图（含每条事件、时序与四组件架构）见
+[docs/04-workflow-diagram.md](docs/04-workflow-diagram.md)。
 
 ## 快速开始
 

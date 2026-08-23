@@ -89,3 +89,6 @@ interface Reasoner {
 
 `Oversight` 不仅监控 Agent，还监控监控器本身。任何通过但无法端到端追溯
 （缺少计划、证据或批判）的功能都会作为 `blind spot` 上报。
+
+完整的运行时主循环、四组件架构和多智能体握手时序见
+[04-workflow-diagram.md](04-workflow-diagram.md)。

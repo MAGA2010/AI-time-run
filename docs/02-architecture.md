@@ -69,3 +69,5 @@ flowchart TD
 - 引入 `ActorKernel`，让 `manager` 与 `decentralized` 多智能体模式成为一等公民。
 - 增加 `Belief-Router` 与墓碑，支持跨会话撤回旧结论。
 - 加入 `Monitor-Blind-Spot` 指标，让监督层同时监督 Agent 和 Agent 的监控器。
+
+完整流程大图、组件架构图和多智能体时序图见 [04-workflow-diagram.md](04-workflow-diagram.md)。
