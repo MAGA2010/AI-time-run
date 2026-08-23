@@ -1,0 +1,4 @@
+node_modules/
+dist/
+.ai-time-run/
+*.log

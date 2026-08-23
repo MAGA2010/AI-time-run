@@ -1,0 +1,29 @@
+{
+  "name": "ai-time-run",
+  "version": "0.1.0",
+  "description": "Evidence-verified, event-sourced runtime for long-horizon autonomous agents.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "ai-time-run": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "docs/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test tests/runtime.test.mjs",
+    "demo": "npm run build && node dist/cli.js demo"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.9.3"
+  }
+}

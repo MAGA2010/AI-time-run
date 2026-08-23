@@ -1,0 +1,169 @@
+/**
+ * types.ts
+ *
+ * Domain contracts for the SEAC runtime:
+ * State, Evidence, Authority, Coordination.
+ */
+
+export type Timestamp = string;
+
+export type ActorRole =
+  | 'principal'
+  | 'initializer'
+  | 'coding'
+  | 'verifier'
+  | 'observer';
+
+export interface ActorIdentity {
+  id: string;
+  role: ActorRole;
+  trustDomain: string;
+}
+
+export interface Mission {
+  id: string;
+  goal: string;
+  /** Intentions the agent cannot override or rewrite. */
+  protectedIntentions: string[];
+  /** Allowed capability scopes. */
+  capabilityBoundary: string[];
+  /** Whether high-impact effects need a human approval gate. */
+  approvalThreshold: 'none' | 'high-impact';
+}
+
+export interface CapabilityGrant {
+  id: string;
+  actor: string;
+  scope: string;
+  level: 'read' | 'act' | 'oversee';
+  issuedBy: string;
+  issuedAt: Timestamp;
+  revokedAt?: Timestamp;
+}
+
+export interface Feature {
+  id: string;
+  description: string;
+  steps: string[];
+  passes: boolean;
+  evidenceEventId?: string;
+}
+
+export interface FeatureSpec {
+  id: string;
+  description: string;
+  steps: string[];
+}
+
+export type EventType =
+  | 'mission.created'
+  | 'grant.issued'
+  | 'grant.revoked'
+  | 'approval.granted'
+  | 'approval.denied'
+  | 'claim.recorded'
+  | 'evidence.attached'
+  | 'effect.requested'
+  | 'effect.actualized'
+  | 'effect.verified'
+  | 'effect.reverted'
+  | 'checkpoint.created'
+  | 'rollback.requested'
+  | 'feature.registered'
+  | 'feature.updated'
+  | 'shutdown.requested';
+
+export interface Event {
+  id: string;
+  seq: number;
+  at: Timestamp;
+  type: EventType;
+  actor: string;
+  payload: Record<string, unknown>;
+  /** Causal parent event id. */
+  parent?: string;
+  /** Backing evidence event id, when the event is evidence-grounded. */
+  evidence?: string;
+}
+
+export interface Claim {
+  id: string;
+  actor: string;
+  statement: string;
+  evidenceIds: string[];
+}
+
+export interface Evidence {
+  id: string;
+  claimId?: string;
+  source: string;
+  kind: 'probe' | 'observation' | 'trace';
+  ok: boolean;
+  value: unknown;
+}
+
+export interface Effect {
+  id: string;
+  scope: string;
+  featureId?: string;
+  requested: string;
+  actual?: string;
+  status: 'requested' | 'actualized' | 'verified' | 'reverted';
+}
+
+export interface Projection {
+  mission: Mission | null;
+  grants: CapabilityGrant[];
+  approvals: Set<string>;
+  claims: Map<string, Claim>;
+  evidence: Map<string, Evidence>;
+  effects: Map<string, Effect>;
+  features: Map<string, Feature>;
+  checkpoints: Event[];
+  shutdown: boolean;
+}
+
+export interface AuthorityDecision {
+  ok: boolean;
+  reason?: string;
+  approvalRequired?: boolean;
+}
+
+export interface ProbeResult {
+  ok: boolean;
+  value: unknown;
+  detail?: string;
+}
+
+export interface Probe {
+  id: string;
+  run: () => Promise<ProbeResult> | ProbeResult;
+}
+
+export interface EffectHandler {
+  scope: string;
+  probeId: string;
+  applies: (feature: Feature) => boolean;
+  describe: (feature: Feature) => string;
+  run: (feature: Feature) => Promise<string> | string;
+  revert: (feature: Feature) => Promise<void> | void;
+  snapshot: () => unknown;
+}
+
+export interface RuntimeOptions {
+  mission: Mission;
+  features: FeatureSpec[];
+  grants: CapabilityGrant[];
+  probes: Probe[];
+  effectHandlers: EffectHandler[];
+  highImpactScopes: Set<string>;
+  approve?: (scope: string, detail: string) => Promise<boolean> | boolean;
+  storeDir?: string;
+}
+
+export interface RunResult {
+  ok: boolean;
+  reason?: string;
+  featureId?: string;
+  eventId?: string;
+}
