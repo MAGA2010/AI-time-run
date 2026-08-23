@@ -1,152 +1,87 @@
-# AI Time Run
+# ⏱️ AI Time Run
 
-> Autonomous agents need a ledger they cannot lie in.
->
-> AI Time Run is a managed-agent runtime that decouples the brain from the
-> hands and turns every run into an auditable, event-sourced Episode.
+> **Autonomous agents need a ledger they cannot lie in.**
 
-AI Time Run 是一个面向长周期自主智能体的运行时。它吸收 Anthropic 的 Harness
-工程源头与 OpenAI 的治理实践，把 `Planner - Generator - Evaluator - Critic`
-多智能体对抗闭环、大脑/手脚解耦、宪法对齐和事件溯源统一到一条追加式事实账本上。
-它同时把 2026 年三篇 arXiv Harness 论文（AI Harness Engineering、Life-Harness、
-SafeHarness）落成可运行的机制：Episode 审计包、H0-H3 能力阶梯、熵审计、干预记录。
+A managed-agent runtime that decouples the brain from the hands and turns every
+run into an auditable, event-sourced Episode. Built from the MDIBUS V18
+architecture and the 2026 Harness-Engineering papers.
 
-## 定位
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/badge/tests-27%20passing-green.svg)](tests/runtime.test.mjs)
+[![Stars](https://img.shields.io/github/stars/MAGA2010/AI-time-run?style=social)](https://github.com/MAGA2010/AI-time-run)
 
-AI Time Run 解决的不是“如何让模型更聪明”，而是长周期 Agent 最难的两个工程问题：
+---
 
-- 跨上下文窗口的进度交接与状态持久化。
-- “谁、在什么证据、什么权限下、产生了什么效应”的可审计与可恢复。
+## The problem
 
-为此，它把整个运行时拆成四个可独立部署的组件，并用一条 Session 账本贯穿。
+Long-horizon agents do not fail because the model is weak. They fail because
+the runtime around the model is missing.
 
-## 核心创新
+- 4 hours in, the agent has forgotten what it already verified and does it again.
+- The agent declares "done" while the feature is still broken.
+- A tool call runs outside its permission boundary and nobody notices.
+- After a failure, you cannot tell whether the model, the tool, or the harness
+  was at fault.
+- A reviewer cannot reconstruct what actually happened from the conversation.
 
-1. **反事实模拟认知层**：先模拟、后执行。`Simulator` 在沙盒里快照、执行、再回滚，
-   把“如果这样做会怎样”写成 `simulation.recorded`，真实世界零副作用。
-2. **因果历史与隔离图**：`CausalGraph` 从事件 `parent` 重建显式 DAG，`classifyEffect`
-   把高影响副作用标为 `atomic`（不可中断），其余标为 `parallel`（可并行）。
-3. **语义信任网关**：`TrustGateway` 强制“不可信内容不能改变信任”。只有可信来源
-   且 `ok` 的证据才能翻转功能、信念或权限。
-4. **Episode 审计包**：`buildEpisode()` 把一次运行蒸馏成复现日志、失败归因、确定性
-   检查、验证报告、熵审计与干预日志，并自动归类到 H0-H3 阶梯。
-5. **防篡改 trace viewer**：`renderTraceHtml()` 产出一个自包含 HTML，把每条事件按
-   “是否通过不变量层”着色，伪造的“无证据通过 / 越权执行”会直接标红。
+**AI Time Run does not make the model smarter.** It makes the model's work
+auditable, verifiable, and reversible — by putting every step on a single
+append-only ledger and refusing to trust the model's own word.
 
-## Harness 能力阶梯（H0-H3）
+---
 
-沿用 AI Harness Engineering 的定义，等级由账本里实际存在的证据决定，而不是由
-README 声称决定：
+## How it works
 
-| 等级 | 证据结构 | 判定 |
-| --- | --- | --- |
-| H0 | 只有最终 patch | 无行动轨迹 |
-| H1 | 行动/工具轨迹 | 有 `plan.recorded` / `effect.requested` |
-| H2 | 证据 + 验证 | 有 `evidence.attached` + `effect.verified` |
-| H3 | 完整 Episode 包 | 另有归因、确定性检查、验证报告、熵审计、干预 |
+Nine modules, one data flow. A run moves from intent to environment and back,
+with human oversight able to intervene anywhere:
 
-正常演示达到 H2；当一次运行里同时存在通过与失败归因时，`buildEpisode()` 判定为 H3。
-
-## 核心范式
-
-AI Time Run 遵循 `State-Evidence-Authority-Coordination` 四个范式。
-
-| 范式 | 含义 | 落点 |
-| --- | --- | --- |
-| State | 状态必须能从事件日志重建 | `Ledger + project` |
-| Evidence | 模型输出只是主张，被观察后才成证据 | `Claim / Evidence / Belief` |
-| Authority | 权限是可执行数据，会话撤销连带权限失效 | `AuthorityEngine` |
-| Coordination | 多智能体通过角色、车道、因果链协同 | `Planner/Generator/Critic/Evaluator` |
-
-## 四大组件
-
-| 组件 | 职责 | 实现 |
-| --- | --- | --- |
-| Session | 追加式事件账本，重放/切片/摘要 | `ledger.ts`、`session.ts` |
-| Harness | 编排中枢，多智能体对抗闭环 | `orchestrator.ts` |
-| Sandbox | 手脚工具执行，故障隔离，快照恢复 | `sandbox.ts` |
-| Orchestration | 调度、权限、审批、监督、信念路由 | `authority.ts`、`oversight.ts`、`memory.ts` |
-
-## MDIBUS V18 九模块蓝图
-
-每个模块不再是一个塞满概念的团簇，而是一条逻辑链：一个节点只承载一个概念，
-节点之间的边就是工作流顺序。监督层（09）以虚线反向介入全链路，持久记忆（08）
-把结果回灌认知服务（02）。
-
-```mermaid
-flowchart TB
-  subgraph M1["01 Principal + Mission"]
-    direction LR
-    m1a["Principal<br/>人"] --> m1b["intent-contract<br/>意图契约"] --> m1c["capability-boundary<br/>能力边界"] --> m1d["protected-intentions<br/>受保护意图"] --> m1e["compulsion-log<br/>强制日志"]
-  end
-
-  subgraph M2["02 Cognitive Services"]
-    direction LR
-    m2a["planning-service<br/>规划服务"] --> m2b["OMEGA-simulation<br/>反事实模拟"] --> m2c["observer-monitor<br/>观测监控"] --> m2d["control-compiler<br/>控制编译"] --> m2e["sandboxed<br/>沙盒化执行"]
-  end
-
-  subgraph M3["03 MDIBUS Kernel"]
-    direction LR
-    m3a["evidence/claim-logger<br/>证据/主张日志"] --> m3b["causal-history<br/>因果历史"] --> m3c["dependency/insulation-graph<br/>依赖/隔离图"] --> m3d["isolation<br/>隔离"] --> m3e["retainer<br/>保留器"] --> m3f["conjecture-scheduler<br/>猜想调度"] --> m3g["belief-consumer<br/>信念消费"] --> m3h["policy-engine<br/>策略引擎"]
-  end
-
-  subgraph M4["04 Actor Kernel"]
-    direction LR
-    m4a["identity-engine<br/>身份引擎"] --> m4b["lanes<br/>车道"] --> m4c["trigger/dispatch<br/>触发/分发"] --> m4d["goal-conflict-resolver<br/>目标冲突解决"] --> m4e["COW-model-state<br/>写时复制状态"]
-  end
-
-  subgraph M5["05 Capability + Session"]
-    direction LR
-    m5a["semantic-trust-gateway<br/>语义信任网关"] --> m5b["evidence-arbiter<br/>证据仲裁"] --> m5c["abstraction-detector<br/>抽象检测"] --> m5d["precedent-session<br/>先例会话"] --> m5e["crash-isolation<br/>崩溃隔离"]
-  end
-
-  subgraph M6["06 Environments / World"]
-    direction LR
-    m6a["world<br/>世界状态"] --> m6b["filesystem"]
-    m6a --> m6c["shell/PTY"]
-    m6a --> m6d["browser"]
-    m6a --> m6e["API/cloud/CRUD"]
-    m6a --> m6f["robotics"]
-    m6g["determinism<br/>确定性建模"] -.-> m6a
-  end
-
-  subgraph M7["07 Effect + Verification"]
-    direction LR
-    m7a["checkpoint-recovery<br/>检查点恢复"] --> m7b["actualized-action<br/>实际动作"] --> m7c["verification-probe<br/>验证探测"] --> m7d["effect-validator<br/>效应校验"]
-  end
-
-  subgraph M8["08 Workspace + Durable Memory"]
-    direction LR
-    m8a["journal<br/>日志"] --> m8b["artifact-store<br/>工件存储"] --> m8c["failure/episodic-memory<br/>失败/情景记忆"] --> m8d["belief-router<br/>信念路由"] --> m8e["selective-workspace<br/>选择性工作区"]
-  end
-
-  subgraph M9["09 Eval + Human Oversight"]
-    direction LR
-    m9a["reliability-metrics<br/>可靠性指标"] --> m9b["blind-spot<br/>盲区检测"] --> m9c["belief-eval-lab<br/>信念评估"] --> m9d["refusing-eval<br/>拒绝评估"] --> m9e["safeguard<br/>安全护栏"] --> m9f["mission-download<br/>任务下载"]
-  end
-
-  m1e --> m2a
-  m2e --> m3a
-  m3h --> m4a
-  m4e --> m5a
-  m5e --> m6a
-  m6a --> m7a
-  m7d --> m8a
-  m8e -.->|"evidence / memory feedback"| m2b
-
-  m9f -.->|"oversight"| m1a
-  m9f -.->|"oversight"| m3a
-  m9f -.->|"oversight"| m4a
-  m9f -.->|"oversight"| m5a
-  m9f -.->|"oversight"| m7a
-  m9f -.->|"oversight"| m8a
+```text
+01 Principal + Mission
+        │
+        ▼
+02 Cognitive Services ── (plan → simulate → observe)
+        │
+        ▼
+03 MDIBUS Kernel ────── (claim → evidence → causal history)
+        │
+        ▼
+04 Actor Kernel ─────── (identity → lanes → dispatch)
+        │
+        ▼
+05 Capability + Session (trust gateway → authority → isolation)
+        │
+        ▼
+06 Environments / World (filesystem · shell · browser)
+        │
+        ▼
+07 Effect + Verification (checkpoint → actualize → probe → verify)
+        │
+        ▼
+08 Workspace + Memory ── (journal · artifacts · beliefs)
+        ▲
+        │ evidence / memory feedback
+        └────────────────────────────────── 09 Eval + Oversight
 ```
 
-## 运行时主循环
+| Module | Responsibility | Core artifact |
+| --- | --- | --- |
+| 01 Principal + Mission | Human intent, capability boundary, protected intentions | `mission.created` |
+| 02 Cognitive Services | Planning, counterfactual simulation, observation | `plan.recorded`, `simulation.recorded` |
+| 03 MDIBUS Kernel | Event-sourced durable semantics, claim vs evidence | `claim.recorded`, `evidence.attached` |
+| 04 Actor Kernel | Identity binding, multi-agent lanes, dispatch | `identity.bound` |
+| 05 Capability + Session | Semantic trust, authority, fault isolation | `grant.issued`, `approval.granted` |
+| 06 Environments | Real filesystem / shell / browser adapters | `FileSystemAdapter` |
+| 07 Effect + Verification | Checkpoint, actualize, probe, verify | `effect.verified` |
+| 08 Workspace + Memory | Journal, artifacts, failure/episodic memory, beliefs | `ProgressJournal`, `BeliefRouter` |
+| 09 Eval + Oversight | Metrics, blind spots, automatic escalation | `oversight.escalated` |
 
-运行时遵循 V18 的九模块数据流：`01 主体与任务 → 02 认知服务 → 03 事件内核 →
-04 多智能体 → 05 能力会话 → 06 环境 → 07 校验闭环 → 08 持久记忆`，`09 监督`
-以虚线反向介入。每个节点都标注了它对应的事件或模块。
+---
+
+## Runtime workflow
+
+The nine-module data flow, rendered as a workflow diagram:
 
 ```mermaid
 flowchart TB
@@ -210,212 +145,206 @@ flowchart TB
   s9b -.->|"oversight"| s8a
 ```
 
-## 多智能体角色
+One feature moves through the evidence-verified loop; a feature starts as
+`passes: false` and only external evidence can flip it:
 
-| 角色 | 职责 | 写入的事件 |
+```mermaid
+flowchart TB
+  classDef contract fill:#fff7ed,stroke:#ea580c,color:#1f2937;
+  classDef gate fill:#eff6ff,stroke:#2563eb,color:#1f2937;
+  classDef trace fill:#f0fdf4,stroke:#16a34a,color:#1f2937;
+  classDef failure fill:#fef2f2,stroke:#dc2626,color:#1f2937;
+
+  F["feature.registered<br/>passes = false"] --> P["plan.recorded + claim.recorded"]
+  P --> G["candidate.proposed"]
+  G --> C{"Critic / Constitution<br/>critique.recorded"}
+  C -->|"revise"| G
+  C -->|"pass"| A{"Authority.canAct<br/>grant + approval"}
+  A -->|"denied"| Deny["no-capability-grant / approval-denied"]
+  A -->|"granted"| CK["checkpoint.created"]
+  CK --> E["effect.actualized<br/>sandbox + fault isolation"]
+  E --> PR{"probe 存在?"}
+  PR -->|"no"| RB["rollback.requested"]
+  PR -->|"yes"| EV["runProbe → evidence.attached"]
+  EV --> TR{"trust.assessed<br/>+ evaluation.recorded"}
+  TR -->|"untrusted / failed"| RB
+  TR -->|"trusted"| VF["effect.verified"]
+  VF --> FU["feature.updated<br/>passes=true + evidenceId"]
+  FU --> BL["belief.asserted + memory"]
+  RB --> FA["failure.attributed"]
+
+  class F,P,G,CK,E,FU,BL contract;
+  class C,A,PR,TR gate;
+  class EV,VF trace;
+  class Deny,RB,FA failure;
+```
+
+### Failure modes to harness gates
+
+Each known long-running-agent failure mode is stopped by a specific gate:
+
+```mermaid
+flowchart LR
+  classDef fail fill:#fef2f2,stroke:#dc2626,color:#1f2937;
+  classDef gate fill:#eff6ff,stroke:#2563eb,color:#1f2937;
+
+  FM1["Failure: model declares success\nwithout proof"] --> G1{"Gate: default-FAIL\n+ evidence.attached(ok)"}
+  FM2["Failure: tool runs outside its\npermission boundary"] --> G2{"Gate: grant + approval\n+ validateLedger"}
+  FM3["Failure: a forged pass or\nunauthorized effect is injected"] --> G3{"Gate: ledger invariants\nreject on replay"}
+  FM4["Failure: a tool crashes and\nleaves the world corrupted"] --> G4{"Gate: checkpoint\n+ rollback + fault isolation"}
+  G1 --> Loop(["Next unpassed feature"])
+  G2 --> Loop
+  G3 --> Loop
+  G4 --> Loop
+  class FM1,FM2,FM3,FM4 fail;
+  class G1,G2,G3,G4 gate;
+```
+
+---
+
+## V18 primitives mapped to AI Time Run
+
+| MDIBUS module | AI Time Run implementation | Status |
 | --- | --- | --- |
-| Principal | 定义意图、能力边界，行使审批与停机 | `mission.created`、`approval.*`、`shutdown.requested` |
-| Initializer | 初始化环境，登记默认失败的功能清单 | `feature.registered` |
-| Planner | 选择功能、分解步骤、产出计划与主张 | `plan.recorded`、`claim.recorded` |
-| Generator | 产出候选实现，经宪法修订后交给沙盒 | `candidate.proposed`、`effect.requested` |
-| Critic | 按宪法原则批判候选，触发修订 | `critique.recorded`、`revision.requested` |
-| Evaluator | 运行探测、采集证据、做客观评估 | `evidence.attached`、`evaluation.recorded`、`effect.verified`、`feature.updated` |
-| Observer | 提供外部环境观测与信任判定 | `trust.assessed` |
+| 01 Principal + Mission | `Mission` (protectedIntentions, capabilityBoundary), `AuthorityEngine` grant log | implemented |
+| 02 Cognitive Services | `Simulator` (counterfactual), `Planner`, `ObserverBridge`, `Sandbox` | implemented |
+| 03 MDIBUS Kernel | `Ledger + project`, `CausalGraph`, `Claim/Evidence/Belief`, `ConjectureScheduler` | implemented |
+| 04 Actor Kernel | `Planner/Generator/Critic/Evaluator`, `IdentityEngine` | partial |
+| 05 Capability + Session | `TrustGateway`, `AuthorityEngine`, `Sandbox` fault isolation | implemented |
+| 06 Environments | `FileSystemAdapter`, `Sandbox` tools | partial |
+| 07 Effect + Verification | `checkpoint -> actualized -> probe -> verified/reverted` | implemented |
+| 08 Workspace + Memory | `ProgressJournal`, `ArtifactStore`, `EpisodicMemory`, `FailureMemory`, `BeliefRouter`, `SelectiveWorkspace` | implemented |
+| 09 Eval + Oversight | `Oversight` (metrics + blindSpots + escalate), approval gates | implemented |
 
-## 事件模型
+---
 
-所有事件追加到 `Ledger`，每条事件包含：
-`id / seq / at / type / actor / payload / parent / evidence`。
+## Harness papers mapped
 
-| 事件 | 含义 |
-| --- | --- |
-| `mission.created` | 主体意图契约与能力边界 |
-| `feature.registered` | 默认失败的测试契约 |
-| `plan.recorded` | 规划者产出的计划 |
-| `claim.recorded` | 作者主张，不是真相 |
-| `candidate.proposed` | 生成器候选 |
-| `critique.recorded` | 批判者审查 |
-| `revision.requested` | 宪法修订请求 |
-| `grant.issued` / `grant.revoked` | 能力授权与撤销 |
-| `approval.granted` / `approval.denied` | 人工审批门 |
-| `effect.requested` / `actualized` / `verified` / `reverted` | 副作用生命周期 |
-| `checkpoint.created` / `rollback.requested` | 可逆性 |
-| `evidence.attached` | 探测证据 |
-| `evaluation.recorded` | 评估者结论 |
-| `trust.assessed` | 信任判定 |
-| `simulation.recorded` | 反事实模拟 |
-| `conjecture.recorded` / `conjecture.resolved` | 猜想调度 |
-| `belief.asserted` / `belief.retracted` | 信念与墓碑 |
-| `feature.updated` | 只有带证据才能翻转 |
-| `failure.attributed` | 失败八分类归因（context/tool/feedback/verify/recovery/entropy/model/unknown） |
-| `intervention.recorded` | 人类干预及其可否避免（M-HIR 统计） |
-| `entropy.audited` | 维护负担熵审计（残留/修订抖动/盲区/违规） |
-| `identity.bound` | 身份引擎把 actor 绑定到角色与信任域（选择性握手） |
-| `oversight.escalated` | 监督检测到盲区/违规后自动升级，撤销受影响授权 |
-| `shutdown.requested` | 停机 |
-
-## 不变量
-
-`validateLedger` 在日志层面强制三条机制性不变量，并拒绝伪造事件：
-
-1. `NO_PASS_WITHOUT_VERIFICATION`：`feature.updated` 的 `passes: true` 必须引用 `ok: true` 的证据。
-2. `NO_EFFECT_WITHOUT_AUTHORITY`：`effect.requested` 必须存在未撤销的 `act` 级授权。
-3. `NO_CLAIM_WITHOUT_EVIDENCE`：模型输出先记为 `Claim`，只有被证据支持后才可信。
-
-此外还检查序号连续（追加完整性）与因果父链（`effect.actualized` 必须指向
-`effect.requested`）。
-
-## 权限与审批
-
-- 能力授权是数据：`grant.issued` 记录 actor、scope、level（read/act/oversee）。
-- 撤销是墓碑：`grant.revoked` 不删除历史，只标记失效。
-- 高影响 scope 在 `effect.requested` 前必须经过 `approval.granted`。
-- `canAct` 先查授权，再查审批门，缺失任一层都会拒绝并给出明确原因。
-
-## 沙盒与故障隔离
-
-- `Sandbox.execute` 捕获工具异常，返回 `{ ok: false, error }` 而不是抛出。
-- 每次副作用前写入 `checkpoint.created`，失败时 `rollback.requested` 后用快照恢复。
-- 大脑（`Reasoner`）与手脚（`Tool`）彻底解耦，模型故障不影响工具状态。
-
-## 宪法对齐
-
-`Constitution` 把原则作为数据，`Critic` 对每个候选逐条审查。不符合时请求修订，
-达到 `maxRevisions` 仍不符合则拒绝。这对应 Constitutional AI 的“自我批判-修正”闭环。
-
-## 记忆系统
-
-| 记忆 | 职责 |
-| --- | --- |
-| `ProgressJournal` | 跨会话进度日志 |
-| `ArtifactStore` | 代码、报告、需求追踪 |
-| `EpisodicMemory` | 任务片段与复盘 |
-| `FailureMemory` | 失败操作历史 |
-| `BeliefRouter` | 信念发布/撤回，撤回用墓碑 |
-
-## 监督与盲区
-
-`Oversight` 计算通过率、计划/候选/批判/修订数、效应与信念统计，并检测盲区：
-任何“通过但缺少证据、计划或批判”的功能都会被上报。监督不仅监控 Agent，
-也监控监控器本身。
-
-## 论文矩阵
-
-### 工程源头（Anthropic / OpenAI）
-
-| 论文 | 作者 | 吸收的机制 |
+| Paper | Core mechanism | Landing point here |
 | --- | --- | --- |
-| Effective harnesses for long-running agents | Anthropic 2025-11 | Initializer/Coding 分工、默认失败功能清单、跨会话持久工件 |
-| Harness design for long-running application development | Anthropic 2026-03 | Planner-Generator-Evaluator 对抗 Harness、sprint 迭代 |
-| Scaling Managed Agents: Decoupling the brain from the hands | Anthropic 2026-04 | Session/Harness/Sandbox/Orchestration 四组件、大脑手脚解耦 |
-| Constitutional AI: Harmlessness from AI Feedback | Anthropic 2022 | 模型自我批判-修正闭环 |
+| AI Harness Engineering (2605.13357) | 11 responsibilities, H0-H3 ladder, eight failure classes, Episode package | `episode.ts`, `failure.attributed`, `entropy.audited`, `intervention.recorded` |
+| Life-Harness (2605.22166) | Improve frozen models by evolving the runtime interface | `FailureMemory` → reusable constitution principles (roadmap) |
+| SafeHarness (2604.13630) | Four defense layers + cross-layer escalation | `authority.ts`, `oversight.escalate()` |
+| Effective harnesses for long-running agents | Initializer/Coding split, default-FAIL features | `feature.registered` default `passes:false` |
+| Scaling Managed Agents | Session / Harness / Sandbox / Orchestration decoupling | `ledger` + `orchestrator` + `sandbox` + `authority` |
+| Constitutional AI | Model self-critique / revision loop | `constitution.ts` Critic → revision |
 
-### 2026 Harness 学科（arXiv）
+---
 
-| 论文 | 核心机制 | 本仓库落点 |
+## Runtime command map
+
+| Command | What it does | Artifact |
 | --- | --- | --- |
-| AI Harness Engineering（2605.13357） | 11 项职责、H0-H3 阶梯、八类失败、Episode 包、M-HIR | `episode.ts`、`failure.attributed`、`entropy.audited`、`intervention.recorded` |
-| Life-Harness（2605.22166） | 不碰模型权重，只演化运行时接口；失败 → 可复用干预 | `FailureMemory` → 宪法原则/工具前置条件（路线图） |
-| SafeHarness（2604.13630） | 四层防御 + 跨层升级（验证加严 / 回滚 / 降权） | `authority.ts`、`oversight.ts` 盲区升级（路线图） |
+| `ai-time-run demo` | Run the managed-agent demo | `ledger.jsonl` |
+| `ai-time-run demo --store ./data` | Run and persist state | `data/ledger.jsonl` |
+| `ai-time-run episode` | Print the Episode audit package | JSON |
+| `ai-time-run trace --store ./data` | Render a self-contained trace viewer | `data/trace.html` |
+| `ai-time-run tamper --store ./data` | Inject forged events to show rejection | `forged-ledger.jsonl`, `forged-trace.html` |
 
-详细拆解与复制清单见 [07-harness-papers.md](docs/07-harness-papers.md)。
-
-## 快速开始
+| Role | Responsibility | Must not do |
+| --- | --- | --- |
+| Principal | Define intent, boundary, approvals, shutdown | Rewrite protected intentions |
+| Initializer | Register default-failing features, init environment | Mark anything passing |
+| Planner | Pick a feature, decompose steps, write plan + claim | Claim truth without evidence |
+| Generator | Produce candidates, request effects | Approve its own work |
+| Critic | Review candidates against the constitution | Pass a violating candidate |
+| Evaluator | Run probes, attach evidence, verify effects | Pass without `ok:true` evidence |
+| Observer | Assess trust, detect blind spots, escalate | Mutate trust from untrusted content |
 
 ```bash
+# One complete evidence-verified loop
+ai-time-run demo --store ./data
+ai-time-run episode --store ./data
+ai-time-run trace --store ./data
+ai-time-run tamper --store ./data
+```
+
+---
+
+## 30-second quickstart
+
+```bash
+git clone https://github.com/MAGA2010/AI-time-run
+cd ai-time-run
 npm install
 npm run build
-npm run demo
 npm test
+
+# Run the demo (memory only)
+npm run demo
+
+# Run the demo and persist the ledger
+node dist/cli.js demo --store ./data
+
+# Inspect the Episode audit package
+node dist/cli.js episode --store ./data
+
+# Render a self-contained trace viewer (open data/trace.html in a browser)
+node dist/cli.js trace --store ./data
+
+# Show that forged events are rejected by the invariant layer
+node dist/cli.js tamper --store ./data
 ```
 
-`demo` 会跑四个功能，分别演示：授权成功、审批门放行、越权拒绝、审批拒绝，并触发
-一次宪法修订环。预期输出包含 `57 events, VALID`、`plans 4 / candidates 5 /
-critiques 5 / revisions 1`、`beliefs 2`、`blind spots: none`，以及
-`harness level: H2`、`responsibilities: 10/11 covered`。
+The demo runs four features and demonstrates authorized pass, approval gate,
+no-capability rejection, approval denial, and one constitutional revision. The
+expected output includes `57 events, VALID`, `harness level: H2`, and
+`responsibilities: 10/11 covered`.
 
-## CLI 用法
+---
 
-```bash
-ai-time-run demo                 # 内存运行演示
-ai-time-run demo --store ./data  # 持久化到 ./data/ledger.jsonl
-ai-time-run episode --store ./data     # 打印 Episode 审计包 JSON
-ai-time-run trace --store ./data       # 从 ledger.jsonl 渲染 trace.html
-ai-time-run tamper --store ./data      # 注入伪造事件，产出 forged-trace.html
-```
+## The design rules (non-negotiable)
 
-`trace.html` 是自包含页面，可直接用浏览器打开，无需服务器；`tamper` 会把一条
-干净账本改成包含“无证据通过 / 越权执行 / 无证据验证”的伪造账本，并在
-`forged-trace.html` 里把这些行标红，展示不变量层的拒绝能力。
+1. **Evidence before pass.** A feature can only flip to `passes: true` with an
+   `ok: true` evidence event; the model's word is never trusted.
+2. **Authority is data.** Grants are events; revocation is a tombstone; nothing
+   acts without an active `act`-level grant.
+3. **Every step is traceable.** The ledger is append-only and replayable; the
+   invariant layer can reject forged events without trusting the writer.
+4. **The brain is swappable.** `Reasoner` is the only model-facing seam; the
+   harness and sandbox are model-agnostic.
+5. **Failures are attributed, then recovered.** A failure gets a classified
+   `failure.attributed` event before any rollback.
+6. **The hands are isolated.** Tool crashes never reach the brain; effects are
+   checkpointed before they run.
 
-## 项目结构
+---
 
-| 路径 | 职责 |
-| --- | --- |
-| `src/ledger.ts` | 追加式事件账本 |
-| `src/project.ts` | 从事件重建当前状态 |
-| `src/session.ts` | 会话重放、切片、摘要 |
-| `src/causal.ts` | 因果历史与隔离图 |
-| `src/cognition.ts` | 反事实模拟、观测桥、猜想调度 |
-| `src/trust.ts` | 语义信任网关 |
-| `src/sandbox.ts` | 手脚工具执行与故障隔离 |
-| `src/constitution.ts` | 宪法原则与批判 |
-| `src/actors.ts` | 角色与可插拔 Reasoner |
-| `src/authority.ts` | 能力授权与审批门 |
-| `src/evidence.ts` | 主张与证据 |
-| `src/verification.ts` | 探测与校验 |
-| `src/memory.ts` | 进度、情景、失败、信念路由 |
-| `src/oversight.ts` | 指标与盲区检测 |
-| `src/invariants.ts` | 日志级不变量校验 |
-| `src/orchestrator.ts` | ManagedRuntime 编排器 |
-| `src/episode.ts` | Episode 审计包、H0-H3、熵审计、干预、归因 |
-| `src/trace.ts` | 自包含 HTML trace viewer 渲染 |
-| `src/identity.ts` | 身份引擎：身份绑定、信任域选择性握手 |
-| `src/workspace.ts` | 选择性工作区：上下文预算、黑名单、关键证据 |
-| `src/environment.ts` | 真实文件系统适配器 + 工具/探测 |
-| `src/demo.ts` | 自包含演示场景 |
-| `tests/` | 不变量与回路测试 |
+## Documentation
 
-## 文档索引
+Full docs live under [docs/](docs/):
 
-| 文档 | 内容 |
-| --- | --- |
-| [01-papers.md](docs/01-papers.md) | 论文与技术博客合集 |
-| [02-architecture.md](docs/02-architecture.md) | 早期架构说明 |
-| [03-managed-agent-runtime.md](docs/03-managed-agent-runtime.md) | 四大组件与多智能体闭环 |
-| [04-workflow-diagram.md](docs/04-workflow-diagram.md) | 完整流程图、组件图、时序图 |
-| [05-mdibus-mapping.md](docs/05-mdibus-mapping.md) | MDIBUS 九模块映射 |
-| [06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md) | MDIBUS V18 完整蓝图 |
-| [07-harness-papers.md](docs/07-harness-papers.md) | 三篇 2026 arXiv Harness 论文深度拆解与复制清单 |
-| [08-v18-deep-study.md](docs/08-v18-deep-study.md) | MDIBUS V18 完全学习笔记（逐模块拆解） |
+- [01-papers.md](docs/01-papers.md) — Anthropic / OpenAI engineering sources
+- [02-architecture.md](docs/02-architecture.md) — early architecture notes
+- [03-managed-agent-runtime.md](docs/03-managed-agent-runtime.md) — four components + multi-agent loop
+- [04-workflow-diagram.md](docs/04-workflow-diagram.md) — full workflow, component, sequence diagrams
+- [05-mdibus-mapping.md](docs/05-mdibus-mapping.md) — MDIBUS nine-module mapping
+- [06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md) — MDIBUS V18 full blueprint
+- [07-harness-papers.md](docs/07-harness-papers.md) — three 2026 arXiv papers deep-dive
+- [08-v18-deep-study.md](docs/08-v18-deep-study.md) — complete V18 study notes
 
-## 设计原则
+---
 
-- 简单优先：先用确定性 `Reasoner` 跑通闭环，再替换真实模型。
-- 证据优先：不信任模型自述，只信任探测证据。
-- 可逆优先：副作用前检查点，失败可回滚。
-- 透明优先：每一步都写入事件账本，可重放、可审计。
+## Contributing
 
-## 路线图
+Bug fixes, docs improvements, and new harness modules are welcome. The
+[design rules](#the-design-rules-non-negotiable) above are the source of truth
+for any change. Keep a new module testable and wired into the Episode package.
 
-- `Identity Engine`：模型/容器/信任域身份绑定与选择性握手。
-- `Goal Conflict Resolver`：多目标冲突检测与权限下调。
-- `External-Agent-Adapter`：有边界的跨 Agent 委托契约。
-- `Copy-On-Write Model State`：delta-only fork 隔离。
-- `Belief-Eval-Lab`：假设模拟与现实对比。
-- `Browser / Shell / API`：真实环境适配器与确定性建模。
-
-## 常见问题
-
-**为什么不用 LLM 框架？**
-运行时与推理解耦，`Reasoner` 是唯一需要接模型的接口，便于替换和测试。
-
-**账本会无限增长吗？**
-账本是追加式的，`Session.slice` 可以按类型/角色/数量切片，`compact` 可做摘要压缩。
-
-**撤销授权会删除历史吗？**
-不会，`grant.revoked` 与 `belief.retracted` 都是墓碑，历史始终可追溯。
+---
 
 ## License
 
-MIT
+[MIT](LICENSE) — © 2026 MAGA2010
+
+---
+
+## Star history
+
+<a href="https://star-history.com/#MAGA2010/AI-time-run&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=MAGA2010/AI-time-run&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=MAGA2010/AI-time-run&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=MAGA2010/AI-time-run&type=Date" />
+  </picture>
+</a>
