@@ -62,6 +62,11 @@ export type EventType =
   | 'approval.granted'
   | 'approval.denied'
   | 'claim.recorded'
+  | 'plan.recorded'
+  | 'candidate.proposed'
+  | 'critique.recorded'
+  | 'revision.requested'
+  | 'evaluation.recorded'
   | 'evidence.attached'
   | 'effect.requested'
   | 'effect.actualized'
@@ -71,6 +76,8 @@ export type EventType =
   | 'rollback.requested'
   | 'feature.registered'
   | 'feature.updated'
+  | 'belief.asserted'
+  | 'belief.retracted'
   | 'shutdown.requested';
 
 export interface Event {
@@ -116,10 +123,98 @@ export interface Projection {
   grants: CapabilityGrant[];
   approvals: Set<string>;
   claims: Map<string, Claim>;
+  plans: Map<string, Plan>;
+  candidates: Map<string, Candidate>;
+  critiques: Map<string, CritiqueRecord>;
+  beliefs: Map<string, Belief>;
   evidence: Map<string, Evidence>;
   effects: Map<string, Effect>;
   features: Map<string, Feature>;
   checkpoints: Event[];
+  shutdown: boolean;
+}
+
+/** The "brain": pluggable reasoning. A real deployment swaps this for an LLM. */
+export interface Plan {
+  id: string;
+  featureId: string;
+  claim: string;
+  steps: string[];
+}
+
+export interface Candidate {
+  id: string;
+  planId: string;
+  content: string;
+}
+
+export interface Principle {
+  id: string;
+  statement: string;
+}
+
+export interface Critique {
+  principleId: string;
+  ok: boolean;
+  reason: string;
+}
+
+export interface CritiqueRecord {
+  id: string;
+  candidateId: string;
+  critiques: Critique[];
+  ok: boolean;
+}
+
+export interface Evaluation {
+  ok: boolean;
+  summary: string;
+}
+
+export interface Reasoner {
+  plan(mission: Mission, features: Feature[], context: string): Promise<Plan> | Plan;
+  generate(plan: Plan, context: string): Promise<Candidate> | Candidate;
+  critique(candidate: Candidate, principles: Principle[], context: string): Promise<Critique[]> | Critique[];
+  evaluate(candidate: Candidate, evidence: Evidence[], context: string): Promise<Evaluation> | Evaluation;
+}
+
+export interface Belief {
+  id: string;
+  subject: string;
+  value: unknown;
+  retracted: boolean;
+}
+
+export interface Tool {
+  name: string;
+  scope: string;
+  description: string;
+  run: (input: Record<string, unknown>) => Promise<unknown> | unknown;
+  snapshot: () => unknown;
+  restore: (snapshot: unknown) => void;
+}
+
+export interface SandboxResult {
+  ok: boolean;
+  output?: unknown;
+  error?: string;
+}
+
+export interface OversightMetrics {
+  totalFeatures: number;
+  passingFeatures: number;
+  plans: number;
+  candidates: number;
+  critiques: number;
+  revisions: number;
+  claims: number;
+  evidence: number;
+  effects: number;
+  verifiedEffects: number;
+  revertedEffects: number;
+  beliefs: number;
+  retractedBeliefs: number;
+  blindSpots: number;
   shutdown: boolean;
 }
 

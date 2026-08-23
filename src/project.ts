@@ -7,13 +7,17 @@
 
 import type { Ledger } from './ledger.js';
 import type {
+  Belief,
   CapabilityGrant,
+  Candidate,
   Claim,
+  CritiqueRecord,
   Effect,
   Evidence,
   Event,
   Feature,
   Mission,
+  Plan,
   Projection,
 } from './types.js';
 
@@ -23,6 +27,10 @@ function emptyProjection(): Projection {
     grants: [],
     approvals: new Set<string>(),
     claims: new Map<string, Claim>(),
+    plans: new Map<string, Plan>(),
+    candidates: new Map<string, Candidate>(),
+    critiques: new Map<string, CritiqueRecord>(),
+    beliefs: new Map<string, Belief>(),
     evidence: new Map<string, Evidence>(),
     effects: new Map<string, Effect>(),
     features: new Map<string, Feature>(),
@@ -86,6 +94,32 @@ function apply(state: Projection, event: Event): void {
       });
       return;
 
+    case 'plan.recorded':
+      state.plans.set(event.id, {
+        id: event.id,
+        featureId: String(payload.featureId),
+        claim: String(payload.claim),
+        steps: (payload.steps as string[]) ?? [],
+      });
+      return;
+
+    case 'candidate.proposed':
+      state.candidates.set(event.id, {
+        id: event.id,
+        planId: String(payload.planId),
+        content: String(payload.content),
+      });
+      return;
+
+    case 'critique.recorded':
+      state.critiques.set(event.id, {
+        id: event.id,
+        candidateId: String(payload.candidateId),
+        critiques: (payload.critiques as CritiqueRecord['critiques']) ?? [],
+        ok: Boolean(payload.ok),
+      });
+      return;
+
     case 'evidence.attached': {
       const evidence: Evidence = {
         id: event.id,
@@ -131,6 +165,22 @@ function apply(state: Projection, event: Event): void {
     case 'effect.reverted': {
       const effect = event.parent ? state.effects.get(event.parent) : undefined;
       if (effect) effect.status = 'reverted';
+      return;
+    }
+
+    case 'belief.asserted':
+      state.beliefs.set(event.id, {
+        id: event.id,
+        subject: String(payload.subject),
+        value: payload.value,
+        retracted: false,
+      });
+      return;
+
+    case 'belief.retracted': {
+      const beliefId = String(payload.beliefId);
+      const belief = state.beliefs.get(beliefId);
+      if (belief) belief.retracted = true;
       return;
     }
 

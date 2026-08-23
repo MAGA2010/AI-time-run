@@ -8,6 +8,11 @@
 
 import { existsSync, mkdirSync, readFileSync, appendFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+
+import type { Ledger } from './ledger.js';
+import { project } from './project.js';
+import type { Belief } from './types.js';
 
 export class ProgressJournal {
   private path: string | null;
@@ -50,5 +55,87 @@ export class ArtifactStore {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, content, 'utf8');
     return target;
+  }
+}
+
+export interface EpisodicMemoryEntry {
+  id: string;
+  at: string;
+  summary: string;
+  context: string;
+}
+
+export class EpisodicMemory {
+  private entries: EpisodicMemoryEntry[] = [];
+
+  remember(summary: string, context = ''): EpisodicMemoryEntry {
+    const entry: EpisodicMemoryEntry = {
+      id: randomUUID(),
+      at: new Date().toISOString(),
+      summary,
+      context,
+    };
+    this.entries.push(entry);
+    return entry;
+  }
+
+  recall(predicate: (entry: EpisodicMemoryEntry) => boolean): EpisodicMemoryEntry[] {
+    return this.entries.filter(predicate);
+  }
+
+  all(): readonly EpisodicMemoryEntry[] {
+    return this.entries;
+  }
+}
+
+export interface FailureRecord {
+  id: string;
+  at: string;
+  operation: string;
+  reason: string;
+}
+
+export class FailureMemory {
+  private records: FailureRecord[] = [];
+
+  record(operation: string, reason: string): FailureRecord {
+    const record: FailureRecord = {
+      id: randomUUID(),
+      at: new Date().toISOString(),
+      operation,
+      reason,
+    };
+    this.records.push(record);
+    return record;
+  }
+
+  all(): readonly FailureRecord[] {
+    return this.records;
+  }
+}
+
+export class BeliefRouter {
+  constructor(private ledger: Ledger) {}
+
+  assert(actor: string, subject: string, value: unknown) {
+    return this.ledger.append({
+      type: 'belief.asserted',
+      actor,
+      payload: { subject, value },
+    });
+  }
+
+  retract(actor: string, beliefId: string) {
+    const belief = project(this.ledger).beliefs.get(beliefId);
+    if (!belief || belief.retracted) return null;
+    return this.ledger.append({
+      type: 'belief.retracted',
+      actor,
+      payload: { beliefId },
+    });
+  }
+
+  live(): Belief[] {
+    return [...project(this.ledger).beliefs.values()].filter((belief) => !belief.retracted);
   }
 }

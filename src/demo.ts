@@ -1,155 +1,183 @@
 /**
  * demo.ts
  *
- * A self-contained scenario that exercises the whole loop: authorized
- * success, an approval gate, an unauthorized effect, and a missing handler.
+ * A self-contained scenario that exercises the full managed-agent loop:
+ * Planner -> Generator -> Critic (constitutional revision) -> Authority ->
+ * Sandbox (hands) -> Evaluator (probe) -> Belief + Oversight.
  */
 
-import { Runtime } from './runtime.js';
+import { randomUUID } from 'node:crypto';
+
+import { ManagedRuntime } from './orchestrator.js';
+import type { FeatureBinding } from './orchestrator.js';
+import { ROLES } from './actors.js';
 import type {
-  EffectHandler,
-  Feature,
   FeatureSpec,
   Probe,
-  RuntimeOptions,
+  Reasoner,
+  Tool,
 } from './types.js';
 
+const FORBIDDEN = 'UNSAFE';
+
 interface World {
-  welcome: boolean;
-  todosPersisted: boolean;
+  scaffolded: boolean;
+  persisted: boolean;
   synced: boolean;
-  reportExported: boolean;
+  exported: boolean;
 }
 
-export function buildDemoOptions(storeDir?: string): {
-  options: RuntimeOptions;
-  world: World;
-} {
-  const world: World = {
-    welcome: false,
-    todosPersisted: false,
-    synced: false,
-    reportExported: false,
+function makeReasoner(): Reasoner {
+  return {
+    plan: (_mission, features) => {
+      const feature = features[0];
+      return {
+        id: randomUUID(),
+        featureId: feature.id,
+        claim: `Implement ${feature.id}: ${feature.description}`,
+        steps: feature.steps,
+      };
+    },
+    generate: (plan, context) => ({
+      id: randomUUID(),
+      planId: plan.id,
+      content: context.includes('critique')
+        ? `compliant implementation of ${plan.featureId}`
+        : `${FORBIDDEN} implementation of ${plan.featureId}`,
+    }),
+    critique: (candidate, principles) =>
+      principles.map((principle) => {
+        const ok = !candidate.content.includes(FORBIDDEN);
+        return {
+          principleId: principle.id,
+          ok,
+          reason: ok ? 'compliant' : `contains ${FORBIDDEN}`,
+        };
+      }),
+    evaluate: (_candidate, evidence) => ({
+      ok: evidence.length > 0 && evidence.every((item) => item.ok),
+      summary: evidence.length > 0 ? 'evidence-backed' : 'missing evidence',
+    }),
   };
+}
+
+export function buildDemoOptions(storeDir?: string) {
+  const world: World = { scaffolded: false, persisted: false, synced: false, exported: false };
 
   const features: FeatureSpec[] = [
     {
-      id: 'render-welcome',
-      description: 'Render the welcome screen',
-      steps: ['open app', 'verify welcome message is visible'],
+      id: 'scaffold',
+      description: 'Scaffold the app shell',
+      steps: ['generate shell', 'verify shell renders'],
     },
     {
-      id: 'persist-todos',
-      description: 'Persist todos to disk',
-      steps: ['add a todo', 'verify it survives reload'],
+      id: 'persist',
+      description: 'Persist data to disk',
+      steps: ['write data', 'verify it survives reload'],
     },
     {
-      id: 'sync-todos',
-      description: 'Sync todos over the network',
-      steps: ['enable sync', 'verify remote copy matches'],
+      id: 'sync',
+      description: 'Sync data over the network',
+      steps: ['push data', 'verify remote matches'],
     },
     {
-      id: 'export-report',
-      description: 'Export todos as a report',
-      steps: ['choose export', 'verify report file is generated'],
+      id: 'export',
+      description: 'Export a report',
+      steps: ['generate report', 'verify file exists'],
     },
   ];
 
   const probes: Probe[] = [
+    { id: 'ui-probe', run: () => ({ ok: world.scaffolded, value: world.scaffolded }) },
+    { id: 'fs-probe', run: () => ({ ok: world.persisted, value: world.persisted }) },
+    { id: 'http-probe', run: () => ({ ok: world.synced, value: world.synced }) },
+    { id: 'report-probe', run: () => ({ ok: world.exported, value: world.exported }) },
+  ];
+
+  const tools: Tool[] = [
     {
-      id: 'ui-probe',
-      run: () => ({ ok: world.welcome === true, value: world.welcome }),
+      name: 'ui',
+      scope: 'ui',
+      description: 'scaffold the app shell',
+      run: () => {
+        world.scaffolded = true;
+        return 'shell scaffolded';
+      },
+      snapshot: () => ({ scaffolded: world.scaffolded }),
+      restore: (snapshot) => {
+        world.scaffolded = Boolean((snapshot as { scaffolded?: boolean }).scaffolded);
+      },
     },
     {
-      id: 'fs-probe',
-      run: () => ({ ok: world.todosPersisted === true, value: world.todosPersisted }),
+      name: 'fs',
+      scope: 'fs',
+      description: 'persist data to disk',
+      run: () => {
+        world.persisted = true;
+        return 'data persisted';
+      },
+      snapshot: () => ({ persisted: world.persisted }),
+      restore: (snapshot) => {
+        world.persisted = Boolean((snapshot as { persisted?: boolean }).persisted);
+      },
     },
     {
-      id: 'http-probe',
-      run: () => ({ ok: world.synced === true, value: world.synced }),
+      name: 'http',
+      scope: 'http',
+      description: 'sync data over network',
+      run: () => {
+        world.synced = true;
+        return 'data synced';
+      },
+      snapshot: () => ({ synced: world.synced }),
+      restore: (snapshot) => {
+        world.synced = Boolean((snapshot as { synced?: boolean }).synced);
+      },
     },
     {
-      id: 'report-probe',
-      run: () => ({ ok: world.reportExported === true, value: world.reportExported }),
+      name: 'report',
+      scope: 'report',
+      description: 'export a report',
+      run: () => {
+        world.exported = true;
+        return 'report exported';
+      },
+      snapshot: () => ({ exported: world.exported }),
+      restore: (snapshot) => {
+        world.exported = Boolean((snapshot as { exported?: boolean }).exported);
+      },
     },
   ];
 
-  const uiHandler: EffectHandler = {
-    scope: 'ui',
-    probeId: 'ui-probe',
-    applies: (feature: Feature) => feature.id === 'render-welcome',
-    describe: () => 'set welcome state to true',
-    run: () => {
-      world.welcome = true;
-      return 'welcome rendered';
-    },
-    revert: () => {
-      world.welcome = false;
-    },
-    snapshot: () => ({ welcome: world.welcome, todosPersisted: world.todosPersisted }),
-  };
+  const bindings: FeatureBinding[] = [
+    { featureId: 'scaffold', toolName: 'ui', probeId: 'ui-probe', scope: 'ui' },
+    { featureId: 'persist', toolName: 'fs', probeId: 'fs-probe', scope: 'fs' },
+    { featureId: 'sync', toolName: 'http', probeId: 'http-probe', scope: 'http' },
+    { featureId: 'export', toolName: 'report', probeId: 'report-probe', scope: 'report' },
+  ];
 
-  const fsHandler: EffectHandler = {
-    scope: 'fs',
-    probeId: 'fs-probe',
-    applies: (feature: Feature) => feature.id === 'persist-todos',
-    describe: () => 'persist todos to local store',
-    run: () => {
-      world.todosPersisted = true;
-      return 'todos persisted';
-    },
-    revert: () => {
-      world.todosPersisted = false;
-    },
-    snapshot: () => ({ welcome: world.welcome, todosPersisted: world.todosPersisted }),
-  };
-
-  const httpHandler: EffectHandler = {
-    scope: 'http',
-    probeId: 'http-probe',
-    applies: (feature: Feature) => feature.id === 'sync-todos',
-    describe: () => 'sync todos to remote server',
-    run: () => {
-      world.synced = true;
-      return 'todos synced';
-    },
-    revert: () => {
-      world.synced = false;
-    },
-    snapshot: () => ({ synced: world.synced }),
-  };
-
-  const reportHandler: EffectHandler = {
-    scope: 'report',
-    probeId: 'report-probe',
-    applies: (feature: Feature) => feature.id === 'export-report',
-    describe: () => 'generate report file',
-    run: () => {
-      world.reportExported = true;
-      return 'report generated';
-    },
-    revert: () => {
-      world.reportExported = false;
-    },
-    snapshot: () => ({ reportExported: world.reportExported }),
-  };
-
-  const options: RuntimeOptions = {
+  const options = {
     mission: {
-      id: 'todo-app',
-      goal: 'Build a minimal todo app that renders, persists, and exports todos.',
+      id: 'managed-todo-app',
+      goal: 'Build a managed todo app with brain/hands decoupling.',
       protectedIntentions: ['Do not rewrite the principal intent.'],
-      capabilityBoundary: ['ui', 'fs', 'http'],
-      approvalThreshold: 'high-impact',
+      capabilityBoundary: ['ui', 'fs', 'http', 'report'],
+      approvalThreshold: 'high-impact' as const,
     },
     features,
     grants: [
-      { id: 'g-ui', actor: 'coding-agent', scope: 'ui', level: 'act', issuedBy: 'principal', issuedAt: '' },
-      { id: 'g-fs', actor: 'coding-agent', scope: 'fs', level: 'act', issuedBy: 'principal', issuedAt: '' },
-      { id: 'g-report', actor: 'coding-agent', scope: 'report', level: 'act', issuedBy: 'principal', issuedAt: '' },
+      { id: 'g-ui', actor: ROLES.generator, scope: 'ui', level: 'act' as const, issuedBy: ROLES.principal, issuedAt: '' },
+      { id: 'g-fs', actor: ROLES.generator, scope: 'fs', level: 'act' as const, issuedBy: ROLES.principal, issuedAt: '' },
+      { id: 'g-report', actor: ROLES.generator, scope: 'report', level: 'act' as const, issuedBy: ROLES.principal, issuedAt: '' },
     ],
+    principles: [
+      { id: 'safe', statement: `must not contain ${FORBIDDEN}` },
+      { id: 'scoped', statement: 'must stay within the mission boundary' },
+    ],
+    reasoner: makeReasoner(),
+    bindings,
+    tools,
     probes,
-    effectHandlers: [uiHandler, fsHandler, httpHandler, reportHandler],
     highImpactScopes: new Set(['fs', 'http', 'report']),
     approve: async (scope: string) => scope === 'fs',
     storeDir,
@@ -160,7 +188,7 @@ export function buildDemoOptions(storeDir?: string): {
 
 export async function runDemo(storeDir?: string) {
   const { options } = buildDemoOptions(storeDir);
-  const runtime = Runtime.create(options);
+  const runtime = ManagedRuntime.create(options);
   const results = await runtime.runAll();
   const validation = runtime.validate();
   const saved = runtime.save();
