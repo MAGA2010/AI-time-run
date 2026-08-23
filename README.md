@@ -25,6 +25,17 @@ AI Time Run 是一个面向长周期自主智能体的运行时，吸收 Anthrop
 
 这些不变量由 `validateLedger` 强制检查，任何伪造的“通过”或“已验证”事件都会被拒绝。
 
+## MDIBUS 血缘
+
+本实现以 `MDIBUS-Runtime Architecture V18` 的九模块为蓝本，保留
+`State-Evidence-Authority-Coordination` 范式，并在三处做了创新：
+
+- 反事实模拟认知层：先模拟、后执行，副作用在真实世界中隔离。
+- 因果历史与隔离图：把 `atomic/parallel` 与依赖关系变成可审计的事实。
+- 语义信任网关：不可信内容不能改变信任，只有可信证据才能翻转状态。
+
+完整九模块映射见 [docs/05-mdibus-mapping.md](docs/05-mdibus-mapping.md)。
+
 ## 四篇核心论文
 
 | 论文 | 作者 | 吸收的机制 |

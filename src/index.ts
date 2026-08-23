@@ -1,6 +1,9 @@
 export { Ledger } from './ledger.js';
 export { project, isClaimVerified } from './project.js';
 export { replay, slice, summarize } from './session.js';
+export { CausalGraph, classifyEffect } from './causal.js';
+export { Simulator, ObserverBridge, ConjectureScheduler } from './cognition.js';
+export { TrustGateway } from './trust.js';
 export { AuthorityEngine } from './authority.js';
 export { Constitution } from './constitution.js';
 export { Sandbox } from './sandbox.js';
@@ -45,5 +48,7 @@ export type {
   RunResult,
   RuntimeOptions,
   SandboxResult,
+  SimulatedOutcome,
   Tool,
+  TrustAssessment,
 } from './types.js';

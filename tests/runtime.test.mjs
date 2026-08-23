@@ -6,6 +6,10 @@ import {
   Runtime,
   ManagedRuntime,
   Sandbox,
+  Simulator,
+  TrustGateway,
+  CausalGraph,
+  classifyEffect,
   Constitution,
   DefaultReasoner,
   ROLES,
@@ -284,4 +288,79 @@ test('oversight reports a passing feature with no evidence as a blind spot', () 
 
   const blindSpots = new Oversight(ledger).blindSpots();
   assert.ok(blindSpots.some((spot) => spot.startsWith('pass-without-evidence')));
+});
+
+test('causal graph rebuilds ancestors, descendants, and is acyclic', () => {
+  const ledger = new Ledger();
+  const a = ledger.append({ type: 'plan.recorded', actor: 'planner', payload: {} });
+  const b = ledger.append({ type: 'candidate.proposed', actor: 'generator', payload: {}, parent: a.id });
+  const c = ledger.append({ type: 'effect.requested', actor: 'generator', payload: { scope: 'fs' }, parent: b.id });
+
+  const graph = new CausalGraph(ledger);
+  assert.equal(graph.isAcyclic(), true);
+  assert.deepEqual(graph.ancestors(c.id).sort(), [a.id, b.id].sort());
+  assert.deepEqual(graph.descendants(a.id).sort(), [b.id, c.id].sort());
+  assert.equal(graph.depth(c.id), 2);
+});
+
+test('insulation classifies high-impact scopes as atomic', () => {
+  const atomicScopes = new Set(['fs']);
+  const atomic = { type: 'effect.requested', payload: { scope: 'fs' } };
+  const parallel = { type: 'effect.requested', payload: { scope: 'ui' } };
+
+  assert.equal(classifyEffect(atomic, atomicScopes), 'atomic');
+  assert.equal(classifyEffect(parallel, atomicScopes), 'parallel');
+});
+
+test('simulator explores counterfactuals without side effects', async () => {
+  const world = { done: false };
+  const sandbox = new Sandbox();
+  sandbox.register({
+    name: 'tool',
+    scope: 'tool',
+    description: 'mutate',
+    run: () => {
+      world.done = true;
+      return 'done';
+    },
+    snapshot: () => ({ done: world.done }),
+    restore: (snapshot) => {
+      world.done = Boolean(snapshot.done);
+    },
+  });
+
+  const simulator = new Simulator(sandbox);
+  const outcome = await simulator.simulate('tool', {});
+
+  assert.equal(outcome.predicted, 'done');
+  assert.equal(outcome.confidence, 1);
+  assert.equal(world.done, false);
+});
+
+test('trust gateway rejects untrusted or failed evidence', () => {
+  const gateway = new TrustGateway();
+
+  assert.equal(
+    gateway.canMutateTrust({ id: 'e1', source: 'probe', kind: 'probe', ok: true, value: 1 }),
+    true,
+  );
+  assert.equal(
+    gateway.canMutateTrust({ id: 'e2', source: 'tool', kind: 'trace', ok: true, value: 1 }),
+    false,
+  );
+  assert.equal(
+    gateway.canMutateTrust({ id: 'e3', source: 'probe', kind: 'probe', ok: false, value: 0 }),
+    false,
+  );
+});
+
+test('managed runtime simulate and conjecture are recorded', async () => {
+  const { runtime, world } = makeManagedRuntime({});
+  await runtime.simulate('tool', {});
+
+  assert.equal(world.done, false);
+  assert.ok(runtime.ledger.byType('simulation.recorded').length >= 1);
+
+  runtime.conjecture('f1', 'hypothesis');
+  assert.ok(runtime.ledger.byType('conjecture.recorded').length >= 1);
 });

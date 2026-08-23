@@ -10,6 +10,8 @@ import { join } from 'node:path';
 
 import { ROLES } from './actors.js';
 import { AuthorityEngine } from './authority.js';
+import { CausalGraph, classifyEffect } from './causal.js';
+import { ConjectureScheduler, Simulator } from './cognition.js';
 import { Constitution } from './constitution.js';
 import { recordClaim } from './evidence.js';
 import { Ledger } from './ledger.js';
@@ -26,6 +28,7 @@ import { Sandbox } from './sandbox.js';
 import { summarize } from './session.js';
 import { runProbe } from './verification.js';
 import { validateLedger } from './invariants.js';
+import { TrustGateway } from './trust.js';
 import type {
   CapabilityGrant,
   Feature,
@@ -72,10 +75,14 @@ export class ManagedRuntime {
   readonly failures = new FailureMemory();
   readonly beliefs: BeliefRouter;
   readonly oversight: Oversight;
+  readonly trust = new TrustGateway();
+  readonly simulator: Simulator;
+  readonly conjectures: ConjectureScheduler;
 
   private reasoner: Reasoner;
   private probes = new Map<string, Probe>();
   private bindings = new Map<string, FeatureBinding>();
+  private highImpactScopes: Set<string>;
   private approve: (scope: string, detail: string) => Promise<boolean> | boolean;
   private maxRevisions: number;
   private storeDir: string | undefined;
@@ -89,6 +96,9 @@ export class ManagedRuntime {
     this.artifacts = new ArtifactStore(options.storeDir);
     this.beliefs = new BeliefRouter(this.ledger);
     this.oversight = new Oversight(this.ledger);
+    this.simulator = new Simulator(this.sandbox);
+    this.conjectures = new ConjectureScheduler(this.ledger);
+    this.highImpactScopes = options.highImpactScopes;
 
     const gates = [...options.highImpactScopes].map((scope) => ({ scope, id: `gate:${scope}` }));
     this.authority = new AuthorityEngine(gates);
@@ -264,6 +274,20 @@ export class ManagedRuntime {
 
     const evidenceEvent = await runProbe(this.ledger, ROLES.evaluator, probe, claimEvent.id);
     const evidence = project(this.ledger).evidence.get(evidenceEvent.id);
+    const assessment = evidence
+      ? this.trust.assess(evidence)
+      : { ok: false, trust: 'untrusted' as const, reason: 'no evidence' };
+    this.ledger.append({
+      type: 'trust.assessed',
+      actor: ROLES.evaluator,
+      payload: {
+        evidenceId: evidenceEvent.id,
+        ok: assessment.ok,
+        trust: assessment.trust,
+        reason: assessment.reason,
+      },
+      parent: evidenceEvent.id,
+    });
     const evaluation = await this.reasoner.evaluate(
       candidate.candidate,
       evidence ? [evidence] : [],
@@ -276,7 +300,7 @@ export class ManagedRuntime {
       parent: evidenceEvent.id,
     });
 
-    if (evidence?.ok && evaluation.ok) {
+    if (assessment.ok && evaluation.ok) {
       this.ledger.append({
         type: 'effect.verified',
         actor: ROLES.evaluator,
@@ -318,6 +342,35 @@ export class ManagedRuntime {
   save(): string | null {
     if (!this.storeDir) return null;
     return this.ledger.save(join(this.storeDir, 'ledger.jsonl'));
+  }
+
+  causalGraph(): CausalGraph {
+    return new CausalGraph(this.ledger);
+  }
+
+  async simulate(toolName: string, input: Record<string, unknown>) {
+    const outcome = await this.simulator.simulate(toolName, input);
+    this.ledger.append({
+      type: 'simulation.recorded',
+      actor: ROLES.planner,
+      payload: {
+        toolName,
+        input,
+        predicted: outcome.predicted,
+        confidence: outcome.confidence,
+      },
+    });
+    return outcome;
+  }
+
+  conjecture(subject: string, hypothesis: unknown) {
+    return this.conjectures.schedule(ROLES.planner, subject, hypothesis);
+  }
+
+  effectInsulation(effectRequestId: string): 'atomic' | 'parallel' {
+    const event = this.ledger.get(effectRequestId);
+    if (!event) return 'parallel';
+    return classifyEffect(event, this.highImpactScopes);
   }
 
   private async plan(mission: Mission, features: Feature[], context: string): Promise<Plan> {

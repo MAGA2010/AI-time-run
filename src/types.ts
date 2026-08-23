@@ -78,6 +78,10 @@ export type EventType =
   | 'feature.updated'
   | 'belief.asserted'
   | 'belief.retracted'
+  | 'simulation.recorded'
+  | 'conjecture.recorded'
+  | 'conjecture.resolved'
+  | 'trust.assessed'
   | 'shutdown.requested';
 
 export interface Event {
@@ -216,6 +220,19 @@ export interface OversightMetrics {
   retractedBeliefs: number;
   blindSpots: number;
   shutdown: boolean;
+}
+
+export interface TrustAssessment {
+  ok: boolean;
+  trust: 'trusted' | 'untrusted';
+  reason: string;
+}
+
+export interface SimulatedOutcome {
+  toolName: string;
+  input: Record<string, unknown>;
+  predicted: unknown;
+  confidence: number;
 }
 
 export interface AuthorityDecision {
