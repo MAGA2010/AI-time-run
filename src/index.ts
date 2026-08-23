@@ -11,6 +11,26 @@ export { ROLES, DefaultReasoner } from './actors.js';
 export { recordClaim, attachEvidence, isVerified } from './evidence.js';
 export { runProbe } from './verification.js';
 export {
+  attributeFailure,
+  auditEntropy,
+  buildEpisode,
+  recordIntervention,
+} from './episode.js';
+export { renderTraceHtml } from './trace.js';
+export type {
+  DeterministicCheck,
+  EntropyAudit,
+  EntropyFinding,
+  EpisodePackage,
+  FailureAttribution,
+  FailureType,
+  HarnessLevel,
+  InterventionKind,
+  InterventionRecord,
+  ReproductionLog,
+  VerificationReport,
+} from './episode.js';
+export {
   ProgressJournal,
   ArtifactStore,
   EpisodicMemory,

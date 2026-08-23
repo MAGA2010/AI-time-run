@@ -1,11 +1,15 @@
 # AI Time Run
 
-> Managed Agent Runtime: decouple the brain from the hands, and make every
-> step auditable through a single event-sourced Session.
+> Autonomous agents need a ledger they cannot lie in.
+>
+> AI Time Run is a managed-agent runtime that decouples the brain from the
+> hands and turns every run into an auditable, event-sourced Episode.
 
 AI Time Run 是一个面向长周期自主智能体的运行时。它吸收 Anthropic 的 Harness
 工程源头与 OpenAI 的治理实践，把 `Planner - Generator - Evaluator - Critic`
 多智能体对抗闭环、大脑/手脚解耦、宪法对齐和事件溯源统一到一条追加式事实账本上。
+它同时把 2026 年三篇 arXiv Harness 论文（AI Harness Engineering、Life-Harness、
+SafeHarness）落成可运行的机制：Episode 审计包、H0-H3 能力阶梯、熵审计、干预记录。
 
 ## 定位
 
@@ -24,6 +28,24 @@ AI Time Run 解决的不是“如何让模型更聪明”，而是长周期 Agen
    把高影响副作用标为 `atomic`（不可中断），其余标为 `parallel`（可并行）。
 3. **语义信任网关**：`TrustGateway` 强制“不可信内容不能改变信任”。只有可信来源
    且 `ok` 的证据才能翻转功能、信念或权限。
+4. **Episode 审计包**：`buildEpisode()` 把一次运行蒸馏成复现日志、失败归因、确定性
+   检查、验证报告、熵审计与干预日志，并自动归类到 H0-H3 阶梯。
+5. **防篡改 trace viewer**：`renderTraceHtml()` 产出一个自包含 HTML，把每条事件按
+   “是否通过不变量层”着色，伪造的“无证据通过 / 越权执行”会直接标红。
+
+## Harness 能力阶梯（H0-H3）
+
+沿用 AI Harness Engineering 的定义，等级由账本里实际存在的证据决定，而不是由
+README 声称决定：
+
+| 等级 | 证据结构 | 判定 |
+| --- | --- | --- |
+| H0 | 只有最终 patch | 无行动轨迹 |
+| H1 | 行动/工具轨迹 | 有 `plan.recorded` / `effect.requested` |
+| H2 | 证据 + 验证 | 有 `evidence.attached` + `effect.verified` |
+| H3 | 完整 Episode 包 | 另有归因、确定性检查、验证报告、熵审计、干预 |
+
+正常演示达到 H2；当一次运行里同时存在通过与失败归因时，`buildEpisode()` 判定为 H3。
 
 ## 核心范式
 
@@ -220,6 +242,9 @@ flowchart TB
 | `conjecture.recorded` / `conjecture.resolved` | 猜想调度 |
 | `belief.asserted` / `belief.retracted` | 信念与墓碑 |
 | `feature.updated` | 只有带证据才能翻转 |
+| `failure.attributed` | 失败八分类归因（context/tool/feedback/verify/recovery/entropy/model/unknown） |
+| `intervention.recorded` | 人类干预及其可否避免（M-HIR 统计） |
+| `entropy.audited` | 维护负担熵审计（残留/修订抖动/盲区/违规） |
 | `shutdown.requested` | 停机 |
 
 ## 不变量
@@ -267,7 +292,9 @@ flowchart TB
 任何“通过但缺少证据、计划或批判”的功能都会被上报。监督不仅监控 Agent，
 也监控监控器本身。
 
-## 四篇核心论文
+## 论文矩阵
+
+### 工程源头（Anthropic / OpenAI）
 
 | 论文 | 作者 | 吸收的机制 |
 | --- | --- | --- |
@@ -275,6 +302,16 @@ flowchart TB
 | Harness design for long-running application development | Anthropic 2026-03 | Planner-Generator-Evaluator 对抗 Harness、sprint 迭代 |
 | Scaling Managed Agents: Decoupling the brain from the hands | Anthropic 2026-04 | Session/Harness/Sandbox/Orchestration 四组件、大脑手脚解耦 |
 | Constitutional AI: Harmlessness from AI Feedback | Anthropic 2022 | 模型自我批判-修正闭环 |
+
+### 2026 Harness 学科（arXiv）
+
+| 论文 | 核心机制 | 本仓库落点 |
+| --- | --- | --- |
+| AI Harness Engineering（2605.13357） | 11 项职责、H0-H3 阶梯、八类失败、Episode 包、M-HIR | `episode.ts`、`failure.attributed`、`entropy.audited`、`intervention.recorded` |
+| Life-Harness（2605.22166） | 不碰模型权重，只演化运行时接口；失败 → 可复用干预 | `FailureMemory` → 宪法原则/工具前置条件（路线图） |
+| SafeHarness（2604.13630） | 四层防御 + 跨层升级（验证加严 / 回滚 / 降权） | `authority.ts`、`oversight.ts` 盲区升级（路线图） |
+
+详细拆解与复制清单见 [07-harness-papers.md](docs/07-harness-papers.md)。
 
 ## 快速开始
 
@@ -286,15 +323,23 @@ npm test
 ```
 
 `demo` 会跑四个功能，分别演示：授权成功、审批门放行、越权拒绝、审批拒绝，并触发
-一次宪法修订环。预期输出包含 `45 events, VALID`、`plans 4 / candidates 5 /
-critiques 5 / revisions 1`、`beliefs 2`、`blind spots: none`。
+一次宪法修订环。预期输出包含 `50 events, VALID`、`plans 4 / candidates 5 /
+critiques 5 / revisions 1`、`beliefs 2`、`blind spots: none`，以及
+`harness level: H2`、`responsibilities: 10/11 covered`。
 
 ## CLI 用法
 
 ```bash
 ai-time-run demo                 # 内存运行演示
 ai-time-run demo --store ./data  # 持久化到 ./data/ledger.jsonl
+ai-time-run episode --store ./data     # 打印 Episode 审计包 JSON
+ai-time-run trace --store ./data       # 从 ledger.jsonl 渲染 trace.html
+ai-time-run tamper --store ./data      # 注入伪造事件，产出 forged-trace.html
 ```
+
+`trace.html` 是自包含页面，可直接用浏览器打开，无需服务器；`tamper` 会把一条
+干净账本改成包含“无证据通过 / 越权执行 / 无证据验证”的伪造账本，并在
+`forged-trace.html` 里把这些行标红，展示不变量层的拒绝能力。
 
 ## 项目结构
 
@@ -316,6 +361,8 @@ ai-time-run demo --store ./data  # 持久化到 ./data/ledger.jsonl
 | `src/oversight.ts` | 指标与盲区检测 |
 | `src/invariants.ts` | 日志级不变量校验 |
 | `src/orchestrator.ts` | ManagedRuntime 编排器 |
+| `src/episode.ts` | Episode 审计包、H0-H3、熵审计、干预、归因 |
+| `src/trace.ts` | 自包含 HTML trace viewer 渲染 |
 | `src/demo.ts` | 自包含演示场景 |
 | `tests/` | 不变量与回路测试 |
 
@@ -329,6 +376,7 @@ ai-time-run demo --store ./data  # 持久化到 ./data/ledger.jsonl
 | [04-workflow-diagram.md](docs/04-workflow-diagram.md) | 完整流程图、组件图、时序图 |
 | [05-mdibus-mapping.md](docs/05-mdibus-mapping.md) | MDIBUS 九模块映射 |
 | [06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md) | MDIBUS V18 完整蓝图 |
+| [07-harness-papers.md](docs/07-harness-papers.md) | 三篇 2026 arXiv Harness 论文深度拆解与复制清单 |
 
 ## 设计原则
 

@@ -21,6 +21,11 @@ import {
   recordClaim,
   isVerified,
   attachEvidence,
+  buildEpisode,
+  renderTraceHtml,
+  attributeFailure,
+  recordIntervention,
+  auditEntropy,
 } from '../dist/index.js';
 
 function makeWorld() {
@@ -363,4 +368,56 @@ test('managed runtime simulate and conjecture are recorded', async () => {
 
   runtime.conjecture('f1', 'hypothesis');
   assert.ok(runtime.ledger.byType('conjecture.recorded').length >= 1);
+});
+
+test('episode package reaches H3 with full responsibility coverage', async () => {
+  const { runtime } = makeManagedRuntime({});
+  await runtime.runFeature('f1');
+
+  runtime.auditEntropy();
+  attributeFailure(runtime.ledger, ROLES.evaluator, 'f1', 'verify', 'synthetic attribution');
+  recordIntervention(runtime.ledger, ROLES.principal, 'approval', 'f1', 'test approval', false);
+
+  const episode = buildEpisode(runtime.ledger);
+
+  assert.equal(episode.harnessLevel, 'H3');
+  assert.equal(episode.failureAttributions.length, 1);
+  assert.equal(episode.interventions.length, 1);
+  assert.equal(Object.values(episode.responsibilityCoverage).filter(Boolean).length, 11);
+  assert.equal(episode.invariants.ok, true);
+});
+
+test('entropy audit, intervention, and attribution are first-class events', async () => {
+  const { runtime } = makeManagedRuntime({});
+  await runtime.runFeature('f1');
+
+  runtime.auditEntropy();
+  recordIntervention(runtime.ledger, ROLES.principal, 'cleanup', 'f1', 'removed residue', true);
+  attributeFailure(runtime.ledger, ROLES.evaluator, 'f1', 'entropy', 'stale artifact');
+
+  const metrics = runtime.oversight.metrics();
+  assert.equal(metrics.interventions, 1);
+  assert.equal(metrics.avoidableInterventions, 1);
+  assert.equal(metrics.failureAttributions, 1);
+  assert.equal(metrics.entropyScore, runtime.ledger.byType('entropy.audited').at(-1).payload.score);
+});
+
+test('trace viewer renders a self-contained page and flags forged events', () => {
+  const ledger = new Ledger();
+  ledger.append({
+    type: 'feature.registered',
+    actor: ROLES.initializer,
+    payload: { featureId: 'f', description: 'd', steps: [] },
+  });
+  ledger.append({
+    type: 'feature.updated',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f', passes: true },
+  });
+
+  const html = renderTraceHtml(ledger, { title: 'forged demo' });
+  assert.match(html, /forged demo/);
+  assert.match(html, /Event Ledger/);
+  assert.match(html, /row forged/);
+  assert.match(html, /VIOLATIONS/);
 });

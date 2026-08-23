@@ -13,6 +13,7 @@ import { AuthorityEngine } from './authority.js';
 import { CausalGraph, classifyEffect } from './causal.js';
 import { ConjectureScheduler, Simulator } from './cognition.js';
 import { Constitution } from './constitution.js';
+import { attributeFailure, auditEntropy, buildEpisode, recordIntervention } from './episode.js';
 import { recordClaim } from './evidence.js';
 import { Ledger } from './ledger.js';
 import {
@@ -203,6 +204,13 @@ export class ManagedRuntime {
 
     const candidate = await this.generateUntilConstitutional(plan, context);
     if (!candidate.ok) {
+      attributeFailure(
+        this.ledger,
+        ROLES.critic,
+        featureId,
+        'model',
+        'candidate failed constitutional critique',
+      );
       return { ok: false, reason: 'constitution-rejected', featureId };
     }
 
@@ -215,6 +223,14 @@ export class ManagedRuntime {
     if (!decision.ok) {
       if (decision.approvalRequired) {
         const approved = await this.approve(binding.scope, candidate.eventId);
+        recordIntervention(
+          this.ledger,
+          ROLES.principal,
+          'approval',
+          binding.scope,
+          approved ? 'approved' : 'denied',
+          false,
+        );
         if (!approved) {
           this.ledger.append({
             type: 'approval.denied',
@@ -260,6 +276,13 @@ export class ManagedRuntime {
     });
 
     if (!result.ok) {
+      attributeFailure(
+        this.ledger,
+        ROLES.evaluator,
+        featureId,
+        'tool',
+        result.error ?? 'tool-failed',
+      );
       await this.rollback(requested.id, featureId);
       this.failures.record(featureId, result.error ?? 'tool-failed');
       return { ok: false, reason: `tool-failed:${result.error}`, featureId };
@@ -267,6 +290,13 @@ export class ManagedRuntime {
 
     const probe = this.probes.get(binding.probeId);
     if (!probe) {
+      attributeFailure(
+        this.ledger,
+        ROLES.evaluator,
+        featureId,
+        'feedback',
+        `missing-probe:${binding.probeId}`,
+      );
       await this.rollback(requested.id, featureId);
       this.failures.record(featureId, `missing-probe:${binding.probeId}`);
       return { ok: false, reason: `missing-probe:${binding.probeId}`, featureId };
@@ -320,6 +350,13 @@ export class ManagedRuntime {
       return { ok: true, featureId, eventId: evidenceEvent.id };
     }
 
+    attributeFailure(
+      this.ledger,
+      ROLES.evaluator,
+      featureId,
+      'verify',
+      'probe evidence or evaluation failed',
+    );
     await this.rollback(requested.id, featureId);
     this.failures.record(featureId, 'verification-failed');
     return { ok: false, reason: 'verification-failed-and-rolled-back', featureId };
@@ -327,6 +364,14 @@ export class ManagedRuntime {
 
   validate() {
     return validateLedger(this.ledger);
+  }
+
+  episode() {
+    return buildEpisode(this.ledger);
+  }
+
+  auditEntropy() {
+    return auditEntropy(this.ledger, ROLES.observer);
   }
 
   shutdown(reason = 'operator requested shutdown') {
@@ -341,6 +386,7 @@ export class ManagedRuntime {
 
   save(): string | null {
     if (!this.storeDir) return null;
+    auditEntropy(this.ledger, ROLES.observer);
     return this.ledger.save(join(this.storeDir, 'ledger.jsonl'));
   }
 

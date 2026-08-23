@@ -1,19 +1,87 @@
 #!/usr/bin/env node
 import { runDemo } from './demo.js';
+import { buildEpisode } from './episode.js';
+import { Ledger } from './ledger.js';
+import { renderTraceHtml } from './trace.js';
+import { ROLES } from './actors.js';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 const command = args[0] ?? 'help';
 const storeIndex = args.indexOf('--store');
 const storeDir = storeIndex >= 0 && args[storeIndex + 1] ? args[storeIndex + 1] : undefined;
 
-if (command !== 'demo') {
+if (command === 'help' || command === undefined) {
   console.log('ai-time-run: evidence-verified event-sourced agent runtime');
-  console.log('usage: ai-time-run demo [--store <dir>]');
+  console.log('usage:');
+  console.log('  ai-time-run demo   [--store <dir>]   run the managed-agent demo');
+  console.log('  ai-time-run episode [--store <dir>]   print the Episode audit package');
+  console.log('  ai-time-run trace  --store <dir>      render dir/trace.html from dir/ledger.jsonl');
+  console.log('  ai-time-run tamper --store <dir>      write forged-ledger.jsonl + forged-trace.html');
   process.exit(command === 'help' ? 0 : 1);
+}
+
+if (command === 'episode') {
+  const { runtime } = await runDemo(storeDir);
+  const episode = buildEpisode(runtime.ledger);
+  console.log(JSON.stringify(episode, null, 2));
+  process.exit(0);
+}
+
+if (command === 'trace') {
+  if (!storeDir) {
+    console.error('trace requires --store <dir>');
+    process.exit(1);
+  }
+  const ledger = Ledger.load(join(storeDir, 'ledger.jsonl'));
+  const html = renderTraceHtml(ledger, { title: 'AI Time Run — clean trace' });
+  const target = join(storeDir, 'trace.html');
+  writeFileSync(target, html, 'utf8');
+  console.log(`trace written to: ${target}`);
+  process.exit(0);
+}
+
+if (command === 'tamper') {
+  if (!storeDir) {
+    console.error('tamper requires --store <dir>');
+    process.exit(1);
+  }
+  const source = join(storeDir, 'ledger.jsonl');
+  const ledger = Ledger.load(source);
+  ledger.append({
+    type: 'feature.updated',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'ghost-feature', passes: true },
+  });
+  ledger.append({
+    type: 'effect.requested',
+    actor: ROLES.generator,
+    payload: { scope: 'http' },
+  });
+  ledger.append({
+    type: 'effect.verified',
+    actor: ROLES.evaluator,
+    payload: { scope: 'ui', featureId: 'ghost-feature' },
+  });
+  const forgedLedger = join(storeDir, 'forged-ledger.jsonl');
+  ledger.save(forgedLedger);
+  const html = renderTraceHtml(ledger, { title: 'AI Time Run — forged trace' });
+  const target = join(storeDir, 'forged-trace.html');
+  writeFileSync(target, html, 'utf8');
+  console.log(`forged ledger written to: ${forgedLedger}`);
+  console.log(`forged trace written to: ${target}`);
+  process.exit(0);
+}
+
+if (command !== 'demo') {
+  console.error(`unknown command: ${command}`);
+  process.exit(1);
 }
 
 const { runtime, results, validation, saved } = await runDemo(storeDir);
 const metrics = runtime.oversight.metrics();
+const episode = runtime.episode();
 
 console.log('\n== Mission ==');
 const mission = runtime.mission();
@@ -34,7 +102,9 @@ console.log(
     `critiques ${metrics.critiques}, revisions ${metrics.revisions}, ` +
     `claims ${metrics.claims}, evidence ${metrics.evidence}, ` +
     `effects ${metrics.effects} (${metrics.verifiedEffects} verified, ${metrics.revertedEffects} reverted), ` +
-    `beliefs ${metrics.beliefs} (${metrics.retractedBeliefs} retracted)`,
+    `beliefs ${metrics.beliefs} (${metrics.retractedBeliefs} retracted), ` +
+    `attributions ${metrics.failureAttributions}, interventions ${metrics.interventions} ` +
+    `(${metrics.avoidableInterventions} avoidable), entropy ${metrics.entropyScore}`,
 );
 
 console.log('\n== Ledger integrity ==');
@@ -55,3 +125,10 @@ for (const belief of runtime.beliefs.live()) {
 }
 
 console.log(`\nledger saved to: ${saved ?? '(memory only)'}`);
+console.log(`\n== Episode package ==`);
+console.log(`harness level: ${episode.harnessLevel}`);
+console.log(
+  `responsibilities: ${Object.entries(episode.responsibilityCoverage)
+    .filter(([, covered]) => covered)
+    .length}/${Object.keys(episode.responsibilityCoverage).length} covered`,
+);

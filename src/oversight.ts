@@ -18,6 +18,8 @@ export class Oversight {
     const features = [...state.features.values()];
     const effects = [...state.effects.values()];
     const beliefs = [...state.beliefs.values()];
+    const interventions = this.ledger.byType('intervention.recorded');
+    const entropyEvent = this.ledger.byType('entropy.audited').at(-1);
 
     return {
       totalFeatures: features.length,
@@ -34,6 +36,12 @@ export class Oversight {
       beliefs: beliefs.length,
       retractedBeliefs: beliefs.filter((belief) => belief.retracted).length,
       blindSpots: this.blindSpots().length,
+      failureAttributions: this.ledger.byType('failure.attributed').length,
+      interventions: interventions.length,
+      avoidableInterventions: interventions.filter((event) =>
+        Boolean(event.payload.avoidable),
+      ).length,
+      entropyScore: Number(entropyEvent?.payload.score ?? 0),
       shutdown: state.shutdown,
     };
   }

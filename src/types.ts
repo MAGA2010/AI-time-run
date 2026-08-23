@@ -82,6 +82,9 @@ export type EventType =
   | 'conjecture.recorded'
   | 'conjecture.resolved'
   | 'trust.assessed'
+  | 'failure.attributed'
+  | 'intervention.recorded'
+  | 'entropy.audited'
   | 'shutdown.requested';
 
 export interface Event {
@@ -219,6 +222,10 @@ export interface OversightMetrics {
   beliefs: number;
   retractedBeliefs: number;
   blindSpots: number;
+  failureAttributions: number;
+  interventions: number;
+  avoidableInterventions: number;
+  entropyScore: number;
   shutdown: boolean;
 }
 
