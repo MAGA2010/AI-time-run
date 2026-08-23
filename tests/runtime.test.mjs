@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 
 import {
   Ledger,
@@ -26,6 +29,9 @@ import {
   attributeFailure,
   recordIntervention,
   auditEntropy,
+  IdentityEngine,
+  SelectiveWorkspace,
+  FileSystemAdapter,
 } from '../dist/index.js';
 
 function makeWorld() {
@@ -420,4 +426,76 @@ test('trace viewer renders a self-contained page and flags forged events', () =>
   assert.match(html, /Event Ledger/);
   assert.match(html, /row forged/);
   assert.match(html, /VIOLATIONS/);
+});
+
+test('identity engine binds identities and gates trust domains', () => {
+  const identity = new IdentityEngine();
+  identity.bind('planner', 'planner', 'local');
+
+  assert.equal(identity.verify('planner').role, 'planner');
+  assert.equal(identity.verify('ghost'), null);
+  assert.equal(identity.handshake('planner', 'local'), true);
+  assert.equal(identity.handshake('planner', 'remote'), false);
+});
+
+test('selective workspace strips blacklist and prepends constraints', () => {
+  const workspace = new SelectiveWorkspace({
+    budget: 1000,
+    hardConstraints: ['no unsafe'],
+    blacklist: ['UNSAFE'],
+    criticalEvidence: ['evidence-1'],
+  });
+
+  const out = workspace.select('body UNSAFE text', ['extra-evidence']);
+  assert.ok(out.includes('CONSTRAINT: no unsafe'));
+  assert.ok(out.includes('EVIDENCE: evidence-1'));
+  assert.ok(out.includes('EVIDENCE: extra-evidence'));
+  assert.ok(!out.includes('UNSAFE'));
+});
+
+test('selective workspace truncates to budget', () => {
+  const workspace = new SelectiveWorkspace({
+    budget: 10,
+    hardConstraints: [],
+    blacklist: [],
+    criticalEvidence: [],
+  });
+  const out = workspace.select('abcdefghijklmnopqrstuvwxyz');
+  assert.ok(out.includes('SelectiveWorkspace truncated'));
+});
+
+test('filesystem adapter enforces root and round-trips writes', () => {
+  const dir = join(os.tmpdir(), `aitr-fs-${Date.now()}`);
+  const fs = new FileSystemAdapter(dir);
+
+  fs.write('a.txt', 'hello');
+  assert.equal(fs.exists('a.txt'), true);
+  assert.equal(fs.read('a.txt'), 'hello');
+  assert.throws(() => fs.write('../escape.txt', 'x'), /path-escape/);
+  fs.remove('a.txt');
+  assert.equal(fs.exists('a.txt'), false);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('oversight escalates and revokes the offending capability', () => {
+  const ledger = new Ledger();
+  const grantIssued = ledger.append({
+    type: 'grant.issued',
+    actor: 'principal',
+    payload: { actor: 'generator', scope: 'fs', level: 'act' },
+  });
+  ledger.append({
+    type: 'effect.requested',
+    actor: 'intruder',
+    payload: { scope: 'fs' },
+  });
+
+  const oversight = new Oversight(ledger);
+  const result = oversight.escalate();
+
+  assert.equal(result.escalated, true);
+  assert.ok(result.actions.includes('revoke:fs'));
+  assert.equal(ledger.byType('oversight.escalated').length, 1);
+  assert.equal(ledger.byType('grant.revoked').length, 1);
+  assert.equal(ledger.byType('grant.revoked')[0].payload.grantId, grantIssued.id);
 });

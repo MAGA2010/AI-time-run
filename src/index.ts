@@ -17,6 +17,11 @@ export {
   recordIntervention,
 } from './episode.js';
 export { renderTraceHtml } from './trace.js';
+export { IdentityEngine } from './identity.js';
+export type { Identity } from './identity.js';
+export { SelectiveWorkspace } from './workspace.js';
+export type { WorkspacePolicy } from './workspace.js';
+export { FileSystemAdapter, makeFileProbe, makeFileTool } from './environment.js';
 export type {
   DeterministicCheck,
   EntropyAudit,

@@ -11,12 +11,12 @@ AI Time Run 以 `MDIBUS-Runtime Architecture V18` 为蓝本，保留其
 | 01 Principal + Mission | `Mission`（protectedIntentions、capabilityBoundary）、`AuthorityEngine` 授权日志 | 已实现 |
 | 02 Cognitive Services | `Simulator`（反事实模拟）、`Planner`、`ObserverBridge`、`Sandbox` | 已实现 + 创新 |
 | 03 MDIBUS Kernel | `Ledger + project`（事件溯源）、`CausalGraph`、`Claim/Evidence/Belief`、`ConjectureScheduler`、`AuthorityEngine` | 已实现 + 创新 |
-| 04 Actor Kernel | `Planner/Generator/Critic/Evaluator` 四角色、宪法修订环 | 部分实现 |
+| 04 Actor Kernel | `Planner/Generator/Critic/Evaluator` 四角色、`IdentityEngine` 身份绑定、宪法修订环 | 部分实现 |
 | 05 Capability + Session Fabric | `TrustGateway`、`Sandbox`、`AuthorityEngine`、故障隔离 | 已实现 + 创新 |
-| 06 Environments / World | `Sandbox` 工具（ui/fs/http/report） | 部分实现 |
+| 06 Environments / World | `Sandbox` 工具（ui/fs/http/report）、`FileSystemAdapter` 真实文件系统 | 部分实现 |
 | 07 Effect + Verification Loop | `checkpoint -> actualized -> probe -> verified/reverted` | 已实现 |
-| 08 Workspace + Durable Memory | `ProgressJournal`、`ArtifactStore`、`EpisodicMemory`、`FailureMemory`、`BeliefRouter` | 已实现 |
-| 09 Eval + Human Oversight | `Oversight`（metrics + blindSpots）、审批门、停机 | 已实现 |
+| 08 Workspace + Durable Memory | `ProgressJournal`、`ArtifactStore`、`EpisodicMemory`、`FailureMemory`、`BeliefRouter`、`SelectiveWorkspace` | 已实现 |
+| 09 Eval + Human Oversight | `Oversight`（metrics + blindSpots + escalate）、审批门、停机 | 已实现 |
 
 ## 三处创新
 

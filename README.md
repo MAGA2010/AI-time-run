@@ -144,116 +144,70 @@ flowchart TB
 
 ## 运行时主循环
 
+运行时遵循 V18 的九模块数据流：`01 主体与任务 → 02 认知服务 → 03 事件内核 →
+04 多智能体 → 05 能力会话 → 06 环境 → 07 校验闭环 → 08 持久记忆`，`09 监督`
+以虚线反向介入。每个节点都标注了它对应的事件或模块。
+
 ```mermaid
 flowchart TB
-  subgraph L0["00 Principal 主体"]
-    P0["Principal 人<br/>意图契约 · 能力边界<br/>protected intentions"]
+  subgraph S1["01 Principal + Mission"]
+    direction LR
+    s1a["Principal 人"] --> s1b["mission.created<br/>意图契约 / 能力边界"]
   end
 
-  subgraph L1["01 Mission 任务授权"]
-    P0 -->|"mission.created"| M1["Mission<br/>goal / boundary / threshold"]
+  subgraph S2["02 Cognitive Services"]
+    direction LR
+    s2a["planning-service<br/>plan.recorded"] --> s2b["OMEGA simulation<br/>simulation.recorded"] --> s2c["observer-monitor<br/>observation"]
   end
 
-  subgraph L2["02 Initializer 初始化"]
-    M1 --> I1["Initializer<br/>feature.registered · 默认 fails<br/>progress + init commit"]
+  subgraph S3["03 MDIBUS Kernel"]
+    direction LR
+    s3a["claim.recorded<br/>作者主张 ≠ 真相"] --> s3b["evidence.attached<br/>证据"] --> s3c["causal-history<br/>policy-engine"]
   end
 
-  subgraph L3["03 Session 会话检查"]
-    I1 --> S1{"Session 状态"}
+  subgraph S4["04 Actor Kernel"]
+    direction LR
+    s4a["identity.bound<br/>身份绑定"] --> s4b["lanes / dispatch"] --> s4c["goal-conflict-resolver"]
   end
 
-  S1 -->|"shutdown.requested"| DONE["结束"]
-  S1 -->|"上下文耗尽"| CMP["compact + summarize"]
-  CMP --> S1
-  S1 -->|"还有未通过功能"| PL1
-  S1 -->|"全部通过"| DONE
-
-  subgraph L4["04 Planner 规划"]
-    PL1["Planner<br/>plan.recorded<br/>选择功能 + 步骤"]
-    PL1 -->|"claim.recorded"| PL2["Claim 主张<br/>作者输出，不是真相"]
+  subgraph S5["05 Capability + Session"]
+    direction LR
+    s5a["semantic-trust-gateway"] --> s5b["authority.canAct<br/>grant + approval"] --> s5c["crash-isolation"]
   end
 
-  subgraph L5["05 Generator 生成"]
-    PL2 --> G1["Generator<br/>candidate.proposed"]
+  subgraph S6["06 Environments / World"]
+    direction LR
+    s6a["FileSystemAdapter<br/>真实文件系统"]
   end
 
-  subgraph L6["06 Critic 宪法批判"]
-    G1 --> C1{"Critic / Constitution<br/>critique.recorded<br/>符合全部原则?"}
-    C1 -->|"否"| RX{"修订次数<br/>< maxRevisions?"}
-    RX -->|"是"| RV["revision.requested"]
-    RV --> G1
-    RX -->|"否"| REJ["constitution-rejected"]
+  subgraph S7["07 Effect + Verification"]
+    direction LR
+    s7a["checkpoint.created"] --> s7b["effect.actualized"] --> s7c["verification-probe"] --> s7d["effect.verified"]
   end
 
-  subgraph L7["07 Authority 权限门"]
-    C1 -->|"是"| A1{"Authority.canAct<br/>act 级授权?"}
-    A1 -->|"无授权"| NGA["no-capability-grant"]
-    A1 -->|"授权已撤销"| RVK["revoked-grant"]
-    A1 -->|"级别不足"| LVL["insufficient-level"]
-    A1 -->|"已授权"| HI{"高影响 scope?"}
-    HI -->|"低影响"| EF
-    HI -->|"高影响"| AP{"Human Approval Gate"}
-    AP -->|"approval.denied"| ADN["approval-denied"]
-    AP -->|"approval.granted"| EF
+  subgraph S8["08 Workspace + Durable Memory"]
+    direction LR
+    s8a["SelectiveWorkspace<br/>上下文预算"] --> s8b["journal / artifact / memory"] --> s8c["belief-router"]
   end
 
-  subgraph L8["08 Sandbox 手脚执行"]
-    EF["effect.requested"] --> CK["checkpoint.created<br/>保存世界快照"]
-    CK --> TO{"工具存在?"}
-    TO -->|"否"| MTO["missing-tool"]
-    TO -->|"是"| SB{"Sandbox.execute<br/>故障隔离"}
-    SB -->|"异常"| RB["rollback.requested<br/>effect.reverted"]
-    SB -->|"成功"| EA["effect.actualized"]
+  subgraph S9["09 Eval + Human Oversight"]
+    direction LR
+    s9a["metrics / blind-spot"] --> s9b["oversight.escalated<br/>撤销授权"]
   end
 
-  subgraph L9["09 Evaluator 客观校验"]
-    EA --> PR{"probe 存在?"}
-    PR -->|"否"| MPR["missing-probe"]
-    PR -->|"是"| EV["runProbe -> evidence.attached"]
-    EV -->|"证据失败"| RB
-    EV -->|"证据通过"| TR{"trust.assessed<br/>可信?"}
-    TR -->|"不可信"| RB
-    TR -->|"可信"| EG{"evaluation.recorded<br/>评估通过?"}
-    EG -->|"否"| RB
-    EG -->|"是"| VF["effect.verified"]
-  end
+  s1b --> s2a
+  s2c --> s3a
+  s3c --> s4a
+  s4c --> s5a
+  s5c --> s6a
+  s6a --> s7a
+  s7d --> s8a
+  s8c -.->|"evidence / memory feedback"| s2c
 
-  subgraph L10["10 Commit 提交"]
-    VF --> FU["feature.updated<br/>passes=true + evidenceId"]
-    FU --> BL["belief.asserted"]
-    BL --> MEM["progress + episodic<br/>artifacts + beliefs"]
-  end
-
-  MEM --> S1
-
-  subgraph L11["11 Oversight 监督盲区"]
-    OV["Oversight<br/>metrics · blindSpots<br/>approval gates · shutdown"]
-  end
-
-  OV -.-> PL1
-  OV -.-> A1
-  OV -.-> PR
-  OV -.-> VF
-  OV -.-> DONE
-  REJ -.-> OV
-  NGA -.-> OV
-  RVK -.-> OV
-  LVL -.-> OV
-  ADN -.-> OV
-  MTO -.-> OV
-  MPR -.-> OV
-  RB -.-> OV
-
-  classDef state fill:#fff7ed,stroke:#ea580c,color:#7c2d12;
-  classDef gate fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
-  classDef write fill:#f0fdf4,stroke:#16a34a,color:#14532d;
-  classDef fail fill:#fef2f2,stroke:#dc2626,color:#7f1d1d;
-  classDef warn fill:#fffbeb,stroke:#d97706,color:#78350f;
-  class M1,PL2,MEM,BL state;
-  class S1,C1,RX,A1,HI,AP,TO,SB,PR,TR,EG gate;
-  class I1,PL1,G1,EF,CK,EA,EV,RV,VF,FU write;
-  class REJ,NGA,RVK,LVL,ADN,MTO,MPR,RB fail;
-  class CMP,DONE warn;
+  s9b -.->|"oversight"| s1a
+  s9b -.->|"oversight"| s5a
+  s9b -.->|"oversight"| s7a
+  s9b -.->|"oversight"| s8a
 ```
 
 ## 多智能体角色
@@ -296,6 +250,8 @@ flowchart TB
 | `failure.attributed` | 失败八分类归因（context/tool/feedback/verify/recovery/entropy/model/unknown） |
 | `intervention.recorded` | 人类干预及其可否避免（M-HIR 统计） |
 | `entropy.audited` | 维护负担熵审计（残留/修订抖动/盲区/违规） |
+| `identity.bound` | 身份引擎把 actor 绑定到角色与信任域（选择性握手） |
+| `oversight.escalated` | 监督检测到盲区/违规后自动升级，撤销受影响授权 |
 | `shutdown.requested` | 停机 |
 
 ## 不变量
@@ -374,7 +330,7 @@ npm test
 ```
 
 `demo` 会跑四个功能，分别演示：授权成功、审批门放行、越权拒绝、审批拒绝，并触发
-一次宪法修订环。预期输出包含 `50 events, VALID`、`plans 4 / candidates 5 /
+一次宪法修订环。预期输出包含 `57 events, VALID`、`plans 4 / candidates 5 /
 critiques 5 / revisions 1`、`beliefs 2`、`blind spots: none`，以及
 `harness level: H2`、`responsibilities: 10/11 covered`。
 
@@ -414,6 +370,9 @@ ai-time-run tamper --store ./data      # 注入伪造事件，产出 forged-trac
 | `src/orchestrator.ts` | ManagedRuntime 编排器 |
 | `src/episode.ts` | Episode 审计包、H0-H3、熵审计、干预、归因 |
 | `src/trace.ts` | 自包含 HTML trace viewer 渲染 |
+| `src/identity.ts` | 身份引擎：身份绑定、信任域选择性握手 |
+| `src/workspace.ts` | 选择性工作区：上下文预算、黑名单、关键证据 |
+| `src/environment.ts` | 真实文件系统适配器 + 工具/探测 |
 | `src/demo.ts` | 自包含演示场景 |
 | `tests/` | 不变量与回路测试 |
 
@@ -428,6 +387,7 @@ ai-time-run tamper --store ./data      # 注入伪造事件，产出 forged-trac
 | [05-mdibus-mapping.md](docs/05-mdibus-mapping.md) | MDIBUS 九模块映射 |
 | [06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md) | MDIBUS V18 完整蓝图 |
 | [07-harness-papers.md](docs/07-harness-papers.md) | 三篇 2026 arXiv Harness 论文深度拆解与复制清单 |
+| [08-v18-deep-study.md](docs/08-v18-deep-study.md) | MDIBUS V18 完全学习笔记（逐模块拆解） |
 
 ## 设计原则
 

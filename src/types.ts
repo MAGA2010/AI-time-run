@@ -85,6 +85,8 @@ export type EventType =
   | 'failure.attributed'
   | 'intervention.recorded'
   | 'entropy.audited'
+  | 'identity.bound'
+  | 'oversight.escalated'
   | 'shutdown.requested';
 
 export interface Event {

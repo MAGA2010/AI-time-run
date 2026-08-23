@@ -15,6 +15,7 @@ import { ConjectureScheduler, Simulator } from './cognition.js';
 import { Constitution } from './constitution.js';
 import { attributeFailure, auditEntropy, buildEpisode, recordIntervention } from './episode.js';
 import { recordClaim } from './evidence.js';
+import { IdentityEngine } from './identity.js';
 import { Ledger } from './ledger.js';
 import {
   ArtifactStore,
@@ -30,6 +31,7 @@ import { summarize } from './session.js';
 import { runProbe } from './verification.js';
 import { validateLedger } from './invariants.js';
 import { TrustGateway } from './trust.js';
+import { SelectiveWorkspace } from './workspace.js';
 import type {
   CapabilityGrant,
   Feature,
@@ -79,6 +81,7 @@ export class ManagedRuntime {
   readonly trust = new TrustGateway();
   readonly simulator: Simulator;
   readonly conjectures: ConjectureScheduler;
+  readonly identity = new IdentityEngine();
 
   private reasoner: Reasoner;
   private probes = new Map<string, Probe>();
@@ -87,6 +90,7 @@ export class ManagedRuntime {
   private approve: (scope: string, detail: string) => Promise<boolean> | boolean;
   private maxRevisions: number;
   private storeDir: string | undefined;
+  private workspace: SelectiveWorkspace;
 
   private constructor(options: ManagedOptions) {
     this.reasoner = options.reasoner;
@@ -100,6 +104,12 @@ export class ManagedRuntime {
     this.simulator = new Simulator(this.sandbox);
     this.conjectures = new ConjectureScheduler(this.ledger);
     this.highImpactScopes = options.highImpactScopes;
+    this.workspace = new SelectiveWorkspace({
+      budget: 20_000,
+      hardConstraints: options.mission.protectedIntentions,
+      blacklist: [],
+      criticalEvidence: [],
+    });
 
     const gates = [...options.highImpactScopes].map((scope) => ({ scope, id: `gate:${scope}` }));
     this.authority = new AuthorityEngine(gates);
@@ -141,6 +151,10 @@ export class ManagedRuntime {
       );
     }
 
+    for (const [actor, role] of Object.entries(ROLES)) {
+      runtime.identity.recordBind(runtime.ledger, actor, role, 'local');
+    }
+
     runtime.progress.append(
       `initialized mission "${options.mission.id}" with ${options.features.length} feature(s)`,
     );
@@ -178,6 +192,7 @@ export class ManagedRuntime {
       if (this.isShutdown()) break;
       results.push(await this.runFeature(featureId));
     }
+    this.oversight.escalate();
     return results;
   }
 
@@ -192,7 +207,7 @@ export class ManagedRuntime {
     const binding = this.bindings.get(featureId);
     if (!binding) return { ok: false, reason: `no-binding:${featureId}`, featureId };
 
-    const context = summarize(this.ledger);
+    const context = this.workspace.select(summarize(this.ledger));
 
     const plan = await this.plan(this.mission(), [feature], context);
     const planEvent = this.ledger.append({

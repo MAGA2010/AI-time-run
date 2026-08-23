@@ -8,6 +8,7 @@
 
 import type { Ledger } from './ledger.js';
 import { project } from './project.js';
+import { validateLedger } from './invariants.js';
 import type { OversightMetrics } from './types.js';
 
 export class Oversight {
@@ -73,5 +74,48 @@ export class Oversight {
     }
 
     return blindSpots;
+  }
+
+  /**
+   * MDIBUS 09: cross-layer escalation. Persistent blind spots or invariant
+   * violations are not just reported; they trigger revocation of the affected
+   * capability and are recorded as a first-class escalation event.
+   */
+  escalate(): { escalated: boolean; actions: string[] } {
+    const violations = validateLedger(this.ledger).violations;
+    const blindSpots = this.blindSpots();
+    if (violations.length === 0 && blindSpots.length === 0) {
+      return { escalated: false, actions: [] };
+    }
+
+    const scopes = new Set<string>();
+    for (const violation of violations) {
+      if (violation.startsWith('unauthorized-effect:')) {
+        const scope = violation.split(':').at(-1);
+        if (scope) scopes.add(scope);
+      }
+    }
+
+    const state = project(this.ledger);
+    const actions: string[] = [];
+    for (const grant of state.grants) {
+      if (grant.revokedAt) continue;
+      if (scopes.has(grant.scope)) {
+        this.ledger.append({
+          type: 'grant.revoked',
+          actor: 'observer',
+          payload: { grantId: grant.id },
+        });
+        actions.push(`revoke:${grant.scope}`);
+      }
+    }
+
+    this.ledger.append({
+      type: 'oversight.escalated',
+      actor: 'observer',
+      payload: { blindSpots, violations, actions },
+    });
+
+    return { escalated: true, actions };
   }
 }

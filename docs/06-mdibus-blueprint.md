@@ -80,9 +80,9 @@ flowchart TB
 | 01 | `Mission`、`AuthorityEngine` 授权日志 | 人机意图契约的显式 UI |
 | 02 | `Simulator`(OMEGA)、`Planner`、`ObserverBridge`、`Sandbox` | Control Compiler |
 | 03 | `Ledger`、`CausalGraph`、`Claim/Evidence/Belief`、`ConjectureScheduler`、`AuthorityEngine` | Retainer 策略引擎 |
-| 04 | `Planner/Generator/Critic/Evaluator` | Identity Engine、Goal Conflict Resolver、External-Agent-Adapter、COW Model State |
+| 04 | `Planner/Generator/Critic/Evaluator`、`IdentityEngine` | Goal Conflict Resolver、External-Agent-Adapter、COW Model State |
 | 05 | `TrustGateway`、`Sandbox`、故障隔离 | Precedent-Session、Abstraction Detector、Evidence Arbiter |
-| 06 | `Sandbox` 工具 | Browser/Shell/API/Determinism 适配器 |
+| 06 | `Sandbox` 工具、`FileSystemAdapter`（真实文件系统） | Browser/Shell/API/Determinism 适配器 |
 | 07 | `checkpoint -> probe -> verified/reverted` | Effect-Validator 差异断言 |
-| 08 | `ProgressJournal`、`ArtifactStore`、`EpisodicMemory`、`FailureMemory`、`BeliefRouter` | Selective-Workspace 上下文窗口控制 |
-| 09 | `Oversight`、审批门、停机 | Belief-Eval-Lab、Refusing-Evaluation、Mission-Download |
+| 08 | `ProgressJournal`、`ArtifactStore`、`EpisodicMemory`、`FailureMemory`、`BeliefRouter`、`SelectiveWorkspace` | — |
+| 09 | `Oversight`、审批门、停机、`escalate()` 自动升级 | Belief-Eval-Lab、Refusing-Evaluation、Mission-Download |
