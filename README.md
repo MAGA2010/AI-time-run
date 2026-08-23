@@ -3,36 +3,49 @@
 > Managed Agent Runtime: decouple the brain from the hands, and make every
 > step auditable through a single event-sourced Session.
 
-AI Time Run 是一个面向长周期自主智能体的运行时，吸收 Anthropic 的 Harness 工程
-源头，把 `Planner - Generator - Evaluator - Critic` 多智能体对抗闭环、大脑/手脚
-解耦、宪法对齐和事件溯源统一到一条追加式事实账本上。
+AI Time Run 是一个面向长周期自主智能体的运行时。它吸收 Anthropic 的 Harness
+工程源头与 OpenAI 的治理实践，把 `Planner - Generator - Evaluator - Critic`
+多智能体对抗闭环、大脑/手脚解耦、宪法对齐和事件溯源统一到一条追加式事实账本上。
 
-## 技术突破
+## 定位
 
-现有的 Agent 运行时大多把“模型循环、工具执行、权限、校验”分开实现。AI Time Run
-的突破点是把它们收拢到四个可独立部署的组件，并用一条 Session 账本贯穿：
+AI Time Run 解决的不是“如何让模型更聪明”，而是长周期 Agent 最难的两个工程问题：
 
-- `Session`：追加式事件账本，独立于模型上下文窗口，可重放、切片、回退。
-- `Harness`：编排中枢，运行 Planner-Generator-Evaluator-Critic 对抗闭环。
-- `Sandbox`：手脚工具执行，故障隔离、能力边界、快照回滚，与大脑彻底解耦。
-- `Orchestration`：任务分解、权限门、审批门、效应校验与信念路由。
+- 跨上下文窗口的进度交接与状态持久化。
+- “谁、在什么证据、什么权限下、产生了什么效应”的可审计与可恢复。
 
-三条机制性不变量：
+为此，它把整个运行时拆成四个可独立部署的组件，并用一条 Session 账本贯穿。
 
-- `NO_PASS_WITHOUT_VERIFICATION`：功能没有探测证据，不能被标为通过。
-- `NO_EFFECT_WITHOUT_AUTHORITY`：没有能力授权，不允许发起副作用。
-- `NO_CLAIM_WITHOUT_EVIDENCE`：模型输出只是主张，只有被观察证据支持后才可信。
+## 核心创新
 
-这些不变量由 `validateLedger` 强制检查，任何伪造的“通过”或“已验证”事件都会被拒绝。
+1. **反事实模拟认知层**：先模拟、后执行。`Simulator` 在沙盒里快照、执行、再回滚，
+   把“如果这样做会怎样”写成 `simulation.recorded`，真实世界零副作用。
+2. **因果历史与隔离图**：`CausalGraph` 从事件 `parent` 重建显式 DAG，`classifyEffect`
+   把高影响副作用标为 `atomic`（不可中断），其余标为 `parallel`（可并行）。
+3. **语义信任网关**：`TrustGateway` 强制“不可信内容不能改变信任”。只有可信来源
+   且 `ok` 的证据才能翻转功能、信念或权限。
 
-## MDIBUS 血缘
+## 核心范式
 
-本实现以 `MDIBUS-Runtime Architecture V18` 的九模块为蓝本，保留
-`State-Evidence-Authority-Coordination` 范式，并在三处做了创新：
+AI Time Run 遵循 `State-Evidence-Authority-Coordination` 四个范式。
 
-- 反事实模拟认知层：先模拟、后执行，副作用在真实世界中隔离。
-- 因果历史与隔离图：把 `atomic/parallel` 与依赖关系变成可审计的事实。
-- 语义信任网关：不可信内容不能改变信任，只有可信证据才能翻转状态。
+| 范式 | 含义 | 落点 |
+| --- | --- | --- |
+| State | 状态必须能从事件日志重建 | `Ledger + project` |
+| Evidence | 模型输出只是主张，被观察后才成证据 | `Claim / Evidence / Belief` |
+| Authority | 权限是可执行数据，会话撤销连带权限失效 | `AuthorityEngine` |
+| Coordination | 多智能体通过角色、车道、因果链协同 | `Planner/Generator/Critic/Evaluator` |
+
+## 四大组件
+
+| 组件 | 职责 | 实现 |
+| --- | --- | --- |
+| Session | 追加式事件账本，重放/切片/摘要 | `ledger.ts`、`session.ts` |
+| Harness | 编排中枢，多智能体对抗闭环 | `orchestrator.ts` |
+| Sandbox | 手脚工具执行，故障隔离，快照恢复 | `sandbox.ts` |
+| Orchestration | 调度、权限、审批、监督、信念路由 | `authority.ts`、`oversight.ts`、`memory.ts` |
+
+## MDIBUS V18 九模块蓝图
 
 ```mermaid
 flowchart TB
@@ -142,22 +155,7 @@ flowchart TB
   M09 -.-> M08
 ```
 
-九模块完整蓝图与实现对照见 [docs/06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md)，
-逐模块映射见 [docs/05-mdibus-mapping.md](docs/05-mdibus-mapping.md)。
-
-## 四篇核心论文
-
-| 论文 | 作者 | 吸收的机制 |
-| --- | --- | --- |
-| Effective harnesses for long-running agents | Anthropic 2025-11 | Initializer/Coding 分工、默认失败功能清单、跨会话持久工件 |
-| Harness design for long-running application development | Anthropic 2026-03 | Planner-Generator-Evaluator 对抗 Harness、sprint 迭代 |
-| Scaling Managed Agents: Decoupling the brain from the hands | Anthropic 2026-04 | Session/Harness/Sandbox/Orchestration 四组件、大脑手脚解耦 |
-| Constitutional AI: Harmlessness from AI Feedback | Anthropic 2022 | 模型自我批判-修正闭环，嵌入证据-校验层 |
-
-完整论文合集与补充技术博客见 [docs/01-papers.md](docs/01-papers.md)，架构细节见
-[docs/03-managed-agent-runtime.md](docs/03-managed-agent-runtime.md)。
-
-## 工作流
+## 运行时主循环
 
 ```mermaid
 flowchart TB
@@ -271,8 +269,98 @@ flowchart TB
   class CMP,DONE warn;
 ```
 
-四组件架构图与多智能体握手时序图见
-[docs/04-workflow-diagram.md](docs/04-workflow-diagram.md)。
+## 多智能体角色
+
+| 角色 | 职责 | 写入的事件 |
+| --- | --- | --- |
+| Principal | 定义意图、能力边界，行使审批与停机 | `mission.created`、`approval.*`、`shutdown.requested` |
+| Initializer | 初始化环境，登记默认失败的功能清单 | `feature.registered` |
+| Planner | 选择功能、分解步骤、产出计划与主张 | `plan.recorded`、`claim.recorded` |
+| Generator | 产出候选实现，经宪法修订后交给沙盒 | `candidate.proposed`、`effect.requested` |
+| Critic | 按宪法原则批判候选，触发修订 | `critique.recorded`、`revision.requested` |
+| Evaluator | 运行探测、采集证据、做客观评估 | `evidence.attached`、`evaluation.recorded`、`effect.verified`、`feature.updated` |
+| Observer | 提供外部环境观测与信任判定 | `trust.assessed` |
+
+## 事件模型
+
+所有事件追加到 `Ledger`，每条事件包含：
+`id / seq / at / type / actor / payload / parent / evidence`。
+
+| 事件 | 含义 |
+| --- | --- |
+| `mission.created` | 主体意图契约与能力边界 |
+| `feature.registered` | 默认失败的测试契约 |
+| `plan.recorded` | 规划者产出的计划 |
+| `claim.recorded` | 作者主张，不是真相 |
+| `candidate.proposed` | 生成器候选 |
+| `critique.recorded` | 批判者审查 |
+| `revision.requested` | 宪法修订请求 |
+| `grant.issued` / `grant.revoked` | 能力授权与撤销 |
+| `approval.granted` / `approval.denied` | 人工审批门 |
+| `effect.requested` / `actualized` / `verified` / `reverted` | 副作用生命周期 |
+| `checkpoint.created` / `rollback.requested` | 可逆性 |
+| `evidence.attached` | 探测证据 |
+| `evaluation.recorded` | 评估者结论 |
+| `trust.assessed` | 信任判定 |
+| `simulation.recorded` | 反事实模拟 |
+| `conjecture.recorded` / `conjecture.resolved` | 猜想调度 |
+| `belief.asserted` / `belief.retracted` | 信念与墓碑 |
+| `feature.updated` | 只有带证据才能翻转 |
+| `shutdown.requested` | 停机 |
+
+## 不变量
+
+`validateLedger` 在日志层面强制三条机制性不变量，并拒绝伪造事件：
+
+1. `NO_PASS_WITHOUT_VERIFICATION`：`feature.updated` 的 `passes: true` 必须引用 `ok: true` 的证据。
+2. `NO_EFFECT_WITHOUT_AUTHORITY`：`effect.requested` 必须存在未撤销的 `act` 级授权。
+3. `NO_CLAIM_WITHOUT_EVIDENCE`：模型输出先记为 `Claim`，只有被证据支持后才可信。
+
+此外还检查序号连续（追加完整性）与因果父链（`effect.actualized` 必须指向
+`effect.requested`）。
+
+## 权限与审批
+
+- 能力授权是数据：`grant.issued` 记录 actor、scope、level（read/act/oversee）。
+- 撤销是墓碑：`grant.revoked` 不删除历史，只标记失效。
+- 高影响 scope 在 `effect.requested` 前必须经过 `approval.granted`。
+- `canAct` 先查授权，再查审批门，缺失任一层都会拒绝并给出明确原因。
+
+## 沙盒与故障隔离
+
+- `Sandbox.execute` 捕获工具异常，返回 `{ ok: false, error }` 而不是抛出。
+- 每次副作用前写入 `checkpoint.created`，失败时 `rollback.requested` 后用快照恢复。
+- 大脑（`Reasoner`）与手脚（`Tool`）彻底解耦，模型故障不影响工具状态。
+
+## 宪法对齐
+
+`Constitution` 把原则作为数据，`Critic` 对每个候选逐条审查。不符合时请求修订，
+达到 `maxRevisions` 仍不符合则拒绝。这对应 Constitutional AI 的“自我批判-修正”闭环。
+
+## 记忆系统
+
+| 记忆 | 职责 |
+| --- | --- |
+| `ProgressJournal` | 跨会话进度日志 |
+| `ArtifactStore` | 代码、报告、需求追踪 |
+| `EpisodicMemory` | 任务片段与复盘 |
+| `FailureMemory` | 失败操作历史 |
+| `BeliefRouter` | 信念发布/撤回，撤回用墓碑 |
+
+## 监督与盲区
+
+`Oversight` 计算通过率、计划/候选/批判/修订数、效应与信念统计，并检测盲区：
+任何“通过但缺少证据、计划或批判”的功能都会被上报。监督不仅监控 Agent，
+也监控监控器本身。
+
+## 四篇核心论文
+
+| 论文 | 作者 | 吸收的机制 |
+| --- | --- | --- |
+| Effective harnesses for long-running agents | Anthropic 2025-11 | Initializer/Coding 分工、默认失败功能清单、跨会话持久工件 |
+| Harness design for long-running application development | Anthropic 2026-03 | Planner-Generator-Evaluator 对抗 Harness、sprint 迭代 |
+| Scaling Managed Agents: Decoupling the brain from the hands | Anthropic 2026-04 | Session/Harness/Sandbox/Orchestration 四组件、大脑手脚解耦 |
+| Constitutional AI: Harmlessness from AI Feedback | Anthropic 2022 | 模型自我批判-修正闭环 |
 
 ## 快速开始
 
@@ -283,8 +371,16 @@ npm run demo
 npm test
 ```
 
-`demo` 会跑四个功能，分别演示：授权成功、审批门放行、越权拒绝、审批拒绝，并触发一次
-宪法修订环。
+`demo` 会跑四个功能，分别演示：授权成功、审批门放行、越权拒绝、审批拒绝，并触发
+一次宪法修订环。预期输出包含 `45 events, VALID`、`plans 4 / candidates 5 /
+critiques 5 / revisions 1`、`beliefs 2`、`blind spots: none`。
+
+## CLI 用法
+
+```bash
+ai-time-run demo                 # 内存运行演示
+ai-time-run demo --store ./data  # 持久化到 ./data/ledger.jsonl
+```
 
 ## 项目结构
 
@@ -293,6 +389,9 @@ npm test
 | `src/ledger.ts` | 追加式事件账本 |
 | `src/project.ts` | 从事件重建当前状态 |
 | `src/session.ts` | 会话重放、切片、摘要 |
+| `src/causal.ts` | 因果历史与隔离图 |
+| `src/cognition.ts` | 反事实模拟、观测桥、猜想调度 |
+| `src/trust.ts` | 语义信任网关 |
 | `src/sandbox.ts` | 手脚工具执行与故障隔离 |
 | `src/constitution.ts` | 宪法原则与批判 |
 | `src/actors.ts` | 角色与可插拔 Reasoner |
@@ -305,3 +404,45 @@ npm test
 | `src/orchestrator.ts` | ManagedRuntime 编排器 |
 | `src/demo.ts` | 自包含演示场景 |
 | `tests/` | 不变量与回路测试 |
+
+## 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [01-papers.md](docs/01-papers.md) | 论文与技术博客合集 |
+| [02-architecture.md](docs/02-architecture.md) | 早期架构说明 |
+| [03-managed-agent-runtime.md](docs/03-managed-agent-runtime.md) | 四大组件与多智能体闭环 |
+| [04-workflow-diagram.md](docs/04-workflow-diagram.md) | 完整流程图、组件图、时序图 |
+| [05-mdibus-mapping.md](docs/05-mdibus-mapping.md) | MDIBUS 九模块映射 |
+| [06-mdibus-blueprint.md](docs/06-mdibus-blueprint.md) | MDIBUS V18 完整蓝图 |
+
+## 设计原则
+
+- 简单优先：先用确定性 `Reasoner` 跑通闭环，再替换真实模型。
+- 证据优先：不信任模型自述，只信任探测证据。
+- 可逆优先：副作用前检查点，失败可回滚。
+- 透明优先：每一步都写入事件账本，可重放、可审计。
+
+## 路线图
+
+- `Identity Engine`：模型/容器/信任域身份绑定与选择性握手。
+- `Goal Conflict Resolver`：多目标冲突检测与权限下调。
+- `External-Agent-Adapter`：有边界的跨 Agent 委托契约。
+- `Copy-On-Write Model State`：delta-only fork 隔离。
+- `Belief-Eval-Lab`：假设模拟与现实对比。
+- `Browser / Shell / API`：真实环境适配器与确定性建模。
+
+## 常见问题
+
+**为什么不用 LLM 框架？**
+运行时与推理解耦，`Reasoner` 是唯一需要接模型的接口，便于替换和测试。
+
+**账本会无限增长吗？**
+账本是追加式的，`Session.slice` 可以按类型/角色/数量切片，`compact` 可做摘要压缩。
+
+**撤销授权会删除历史吗？**
+不会，`grant.revoked` 与 `belief.retracted` 都是墓碑，历史始终可追溯。
+
+## License
+
+MIT
