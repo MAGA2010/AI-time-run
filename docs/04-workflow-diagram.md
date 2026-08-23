@@ -19,12 +19,15 @@ flowchart TB
     M1 --> I1["Initializer<br/>feature.registered · 默认 fails<br/>progress + init commit"]
   end
 
-  subgraph L3["03 Session 会话重放/切片"]
-    I1 --> S1{"Session.summarize<br/>还有未通过功能?"}
+  subgraph L3["03 Session 会话检查"]
+    I1 --> S1{"Session 状态"}
   end
 
-  S1 -->|"no"| DONE["结束 · shutdown.requested"]
-  S1 -->|"yes"| L4
+  S1 -->|"shutdown.requested"| DONE["结束"]
+  S1 -->|"上下文耗尽"| CMP["compact + summarize"]
+  CMP --> S1
+  S1 -->|"还有未通过功能"| PL1
+  S1 -->|"全部通过"| DONE
 
   subgraph L4["04 Planner 规划"]
     PL1["Planner<br/>plan.recorded<br/>选择功能 + 步骤"]
@@ -37,31 +40,43 @@ flowchart TB
 
   subgraph L6["06 Critic 宪法批判"]
     G1 --> C1{"Critic / Constitution<br/>critique.recorded<br/>符合全部原则?"}
-    C1 -->|"否"| RV["revision.requested"]
+    C1 -->|"否"| RX{"修订次数<br/>< maxRevisions?"}
+    RX -->|"是"| RV["revision.requested"]
     RV --> G1
+    RX -->|"否"| REJ["constitution-rejected"]
   end
 
   subgraph L7["07 Authority 权限门"]
     C1 -->|"是"| A1{"Authority.canAct<br/>act 级授权?"}
-    A1 -->|"无授权"| DENY["拒绝 · no-capability-grant"]
-    A1 -->|"高影响"| AP{"Human Approval Gate<br/>approval.granted / denied"}
-    AP -->|"拒绝"| DENY
-    AP -->|"通过"| EF
-    A1 -->|"已授权"| EF
+    A1 -->|"无授权"| NGA["no-capability-grant"]
+    A1 -->|"授权已撤销"| RVK["revoked-grant"]
+    A1 -->|"级别不足"| LVL["insufficient-level"]
+    A1 -->|"已授权"| HI{"高影响 scope?"}
+    HI -->|"低影响"| EF
+    HI -->|"高影响"| AP{"Human Approval Gate"}
+    AP -->|"approval.denied"| ADN["approval-denied"]
+    AP -->|"approval.granted"| EF
   end
 
   subgraph L8["08 Sandbox 手脚执行"]
     EF["effect.requested"] --> CK["checkpoint.created<br/>保存世界快照"]
-    CK --> SB{"Sandbox.execute<br/>故障隔离"}
-    SB -->|"工具异常"| RB["rollback.requested<br/>effect.reverted"]
+    CK --> TO{"工具存在?"}
+    TO -->|"否"| MTO["missing-tool"]
+    TO -->|"是"| SB{"Sandbox.execute<br/>故障隔离"}
+    SB -->|"异常"| RB["rollback.requested<br/>effect.reverted"]
     SB -->|"成功"| EA["effect.actualized"]
   end
 
   subgraph L9["09 Evaluator 客观校验"]
-    EA --> PR["Evaluator<br/>runProbe -> evidence.attached"]
-    PR --> EV["evaluation.recorded<br/>证据 + 评估"]
-    EV -->|"证据/评估失败"| RB
-    EV -->|"通过"| VF["effect.verified"]
+    EA --> PR{"probe 存在?"}
+    PR -->|"否"| MPR["missing-probe"]
+    PR -->|"是"| EV["runProbe -> evidence.attached"]
+    EV -->|"证据失败"| RB
+    EV -->|"证据通过"| TR{"trust.assessed<br/>可信?"}
+    TR -->|"不可信"| RB
+    TR -->|"可信"| EG{"evaluation.recorded<br/>评估通过?"}
+    EG -->|"否"| RB
+    EG -->|"是"| VF["effect.verified"]
   end
 
   subgraph L10["10 Commit 提交"]
@@ -81,17 +96,25 @@ flowchart TB
   OV -.-> PR
   OV -.-> VF
   OV -.-> DONE
-  DENY -.-> OV
+  REJ -.-> OV
+  NGA -.-> OV
+  RVK -.-> OV
+  LVL -.-> OV
+  ADN -.-> OV
+  MTO -.-> OV
+  MPR -.-> OV
   RB -.-> OV
 
   classDef state fill:#fff7ed,stroke:#ea580c,color:#7c2d12;
   classDef gate fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
   classDef write fill:#f0fdf4,stroke:#16a34a,color:#14532d;
   classDef fail fill:#fef2f2,stroke:#dc2626,color:#7f1d1d;
+  classDef warn fill:#fffbeb,stroke:#d97706,color:#78350f;
   class M1,PL2,MEM,BL state;
-  class S1,C1,A1,AP,SB,EV gate;
-  class I1,PL1,G1,EF,PR,VF,FU write;
-  class DENY,RB fail;
+  class S1,C1,RX,A1,HI,AP,TO,SB,PR,TR,EG gate;
+  class I1,PL1,G1,EF,CK,EA,EV,RV,VF,FU write;
+  class REJ,NGA,RVK,LVL,ADN,MTO,MPR,RB fail;
+  class CMP,DONE warn;
 ```
 
 ## 2. 四组件架构
