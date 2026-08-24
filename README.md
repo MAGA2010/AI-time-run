@@ -6,11 +6,71 @@ A managed-agent runtime that decouples the brain from the hands and turns every
 run into an auditable, event-sourced Episode. Built from the MDIBUS V18
 architecture and the 2026 Harness-Engineering papers.
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-48%20passing-green.svg)](tests/runtime.test.mjs)
+[![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen.svg)](tests/runtime.test.mjs)
 [![Stars](https://img.shields.io/github/stars/MAGA2010/AI-time-run?style=social)](https://github.com/MAGA2010/AI-time-run)
+[![BREAK 7](https://img.shields.io/badge/BREAK%207-CodeAgent%20%2B%20v0.2-yellow?style=flat-square)](docs/13-break7-codeagent-integration.md)
+[![Ledger](https://img.shields.io/badge/ledger-code%20cells%20auditable-orange?style=flat-square)](src/trace.ts)
+
+---
+
+## 🟡 What's new in BREAK 7 (v0.2, August 2026)
+
+> **CodeAgent 集成** —— 把"长程 Agent 必须可审计"的承诺，从自然语言推理扩展到「**代码即动作**」范式。
+
+BREAK 7 adds a Jupyter-style Python kernel, 5 CodeAgent tools, a rubber-duck self-debug loop,
+QA-Checker multi-agent reasoning, and **all 10 v0.2 roadmap items** from `docs/17`. Every code cell,
+tool call, and traceback is a first-class event on the ledger — fully auditable, never trusted.
+
+<details>
+<summary><b>🟡 10 v0.2 features, at a glance (click to expand)</b></summary>
+
+| # | Feature | Priority | Source | What it does |
+| --- | --- | --- | --- | --- |
+| 1 | `linterGuardedEdit()` | **P0** | SWE-Agent ACI | Wraps `code.apply_patch`; rolls back on lint errors outside the edit range |
+| 2 | `generateFail2PassTests()` | **P0** | JoyCode | Emits 1 failure test + 2 happy/edge tests, pre-validates each on HEAD |
+| 3 | `makeEpisodeBudget()` | P1 | SWE-Agent | Per-episode USD cap with token tracking (default $0.50) |
+| 4 | `writeSnapshot()` / `readSnapshot()` | P1 | OAI Code Interpreter | `.aitr-snap.json` kernel checkpoint for crash recovery |
+| 5 | `compressObservations()` | P1 | SWE-Agent | 80%-window history summarisation, preserves error chains |
+| 6 | `scorePatch()` / `voteBest()` | P1 | JoyCode | 5-factor weighted voting (correctness 50% / minimality 20% / ...) |
+| 7 | `buildFeedbackEvent()` | P2 | CodeAct | `code.feedback` event carrying traceback directly |
+| 8 | `fuzzyFind()` / `applyFuzzy()` | P2 | OAI Coworker | Fuzzy line matching in patches |
+| 9 | `isDockerAvailable()` / `dockerRunPython()` | P2 | JoyCode | Opt-in Docker isolation |
+| 10 | `makeMiniVariant()` | P3 | mini-SWE-agent | Single-tool bash+read+edit+submit mode (cheap lane) |
+
+**26 new unit tests, 74/74 pass total.** See [`src/code/v02.ts`](src/code/v02.ts) (685 LOC) and
+[`tests/break7-v02.test.mjs`](tests/break7-v02.test.mjs).
+
+</details>
+
+<details>
+<summary><b>🟡 7 new EventTypes (click to expand)</b></summary>
+
+| Event | When | Why auditable |
+| --- | --- | --- |
+| `code.cell.executed` | A Python cell finishes (ok or fail) | stdout/stderr captured verbatim |
+| `code.feedback` | Traceback arrived | Self-debug loop can replay without re-parsing |
+| `code.tool.invoked` | `code.search` / `code.apply_patch` / etc. called | Full input + result on the ledger |
+| `code.repl.started` | Kernel spawned | Workspace + pythonBin recorded |
+| `code.repl.shutdown` | Kernel cleaned up | Resource attribution |
+| `code.snapshot.written` | `.aitr-snap.json` flushed | Recovery boundary |
+| `code.budget.exhausted` | USD cap hit | Prevents silent overrun |
+
+</details>
+
+<details>
+<summary><b>🟡 Quick start for BREAK 7 (click to expand)</b></summary>
+
+```bash
+# Three variants; all run on the same ledger.
+node dist/cli.js codeagent --variant codeact     # plan + execute + verify
+node dist/cli.js codeagent --variant self-debug # rubber-duck retry on first failure
+node dist/cli.js codeagent --variant qa-review  # multi-agent QA-Checker lane
+```
+
+</details>
 
 ---
 
@@ -543,6 +603,7 @@ Full docs live under [docs/](docs/):
 - [14-codeagent-study-notes.md](docs/14-codeagent-study-notes.md) — CodeAgent & OpenAI learning notes
 - [15-break7-skill-md-snippet.md](docs/15-break7-skill-md-snippet.md) — SKILL.md upgrade snippet (paste into Codex)
 - [16-break7-algorithms.md](docs/16-break7-algorithms.md) — BREAK 7 algorithm reference (12 techniques)
+- [17-deep-study.md](docs/17-deep-study.md) — BREAK 7 deep study (CodeAct MINT · OAI Coworker · SWE-Agent ACI · JoyCode · mini-SWE-agent)
 
 ---
 
