@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 import type { Probe, Tool } from './types.js';
 
@@ -28,7 +28,10 @@ export class FileSystemAdapter {
 
   private path(name: string): string {
     const target = resolve(this.root, name);
-    if (!target.startsWith(this.root)) throw new Error(`path-escape:${name}`);
+    const rel = relative(this.root, target);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(`path-escape:${name}`);
+    }
     return target;
   }
 
@@ -63,9 +66,14 @@ export function makeFileTool(
     scope: 'fs',
     description: `write ${file}`,
     run: () => adapter.write(file, content),
-    snapshot: () => ({ exists: adapter.exists(file) }),
+    snapshot: () => ({
+      exists: adapter.exists(file),
+      content: adapter.exists(file) ? adapter.read(file) : null,
+    }),
     restore: (snapshot) => {
-      if (!Boolean((snapshot as { exists?: boolean }).exists)) adapter.remove(file);
+      const previous = snapshot as { exists?: boolean; content?: string | null };
+      if (previous.exists) adapter.write(file, previous.content ?? '');
+      else adapter.remove(file);
     },
   };
 }
@@ -83,4 +91,3 @@ export function makeFileProbe(
     },
   };
 }
-

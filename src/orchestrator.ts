@@ -223,6 +223,7 @@ export class ManagedRuntime {
       actor: ROLES.planner,
       payload: { featureId: plan.featureId, claim: plan.claim, steps: plan.steps },
     });
+    plan.id = planEvent.id;
     const claimEvent = recordClaim(this.ledger, ROLES.planner, plan.claim, planEvent.id);
 
     const candidate = await this.generateUntilConstitutional(plan, context);
@@ -480,6 +481,7 @@ export class ManagedRuntime {
       type: 'candidate.proposed',
       actor: ROLES.generator,
       payload: { planId: plan.id, content: candidate.content },
+      parent: plan.id,
     });
 
     let review = await this.constitution.review(this.reasoner, candidate, context);

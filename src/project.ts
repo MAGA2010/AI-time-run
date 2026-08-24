@@ -63,7 +63,7 @@ function apply(state: Projection, event: Event): void {
 
     case 'grant.issued': {
       const grant: CapabilityGrant = {
-        id: event.id,
+        id: String(payload.grantId ?? event.id),
         actor: String(payload.actor ?? event.actor),
         scope: String(payload.scope),
         level: payload.level as CapabilityGrant['level'],

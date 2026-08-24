@@ -51,6 +51,14 @@ export class Oversight {
     const state = project(this.ledger);
     const blindSpots: string[] = [];
 
+    const reviewedFeatureIds = new Set<string>();
+    for (const critique of state.critiques.values()) {
+      if (!critique.ok) continue;
+      const candidate = state.candidates.get(critique.candidateId);
+      const plan = candidate ? state.plans.get(candidate.planId) : undefined;
+      if (plan) reviewedFeatureIds.add(plan.featureId);
+    }
+
     for (const feature of state.features.values()) {
       if (!feature.passes) continue;
 
@@ -65,10 +73,7 @@ export class Oversight {
         blindSpots.push(`pass-without-plan:${feature.id}`);
       }
 
-      const reviewed = [...state.critiques.values()].some(
-        (record) => record.ok,
-      );
-      if (!reviewed) {
+      if (!reviewedFeatureIds.has(feature.id)) {
         blindSpots.push(`pass-without-critique:${feature.id}`);
       }
     }

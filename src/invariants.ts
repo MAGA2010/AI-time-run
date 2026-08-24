@@ -34,7 +34,7 @@ export function validateLedger(ledger: Ledger): ValidationResult {
 
   for (const event of events) {
     if (event.type === 'grant.issued') {
-      grants.set(event.id, {
+      grants.set(String(event.payload.grantId ?? event.id), {
         actor: String(event.payload.actor ?? event.actor),
         scope: String(event.payload.scope),
         level: LEVEL_RANK[String(event.payload.level)] ?? 0,
