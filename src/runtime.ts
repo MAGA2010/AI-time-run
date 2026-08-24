@@ -9,6 +9,7 @@
 import { join } from 'node:path';
 
 import { AuthorityEngine } from './authority.js';
+import { attributeFailure } from './episode.js';
 import { recordClaim } from './evidence.js';
 import { Ledger } from './ledger.js';
 import { ArtifactStore, ProgressJournal } from './memory.js';
@@ -42,7 +43,7 @@ export interface RuntimeMetrics {
 }
 
 export class Runtime {
-  readonly ledger = new Ledger();
+  readonly ledger: Ledger;
   readonly authority: AuthorityEngine;
   readonly progress: ProgressJournal;
   readonly artifacts: ArtifactStore;
@@ -53,6 +54,7 @@ export class Runtime {
   private storeDir: string | undefined;
 
   private constructor(options: RuntimeOptions, handlers: EffectHandler[]) {
+    this.ledger = options.ledger ?? new Ledger();
     this.handlers = handlers;
     this.approve = options.approve ?? (() => true);
     this.storeDir = options.storeDir;
@@ -66,7 +68,10 @@ export class Runtime {
   }
 
   static create(options: RuntimeOptions): Runtime {
-    const runtime = new Runtime(options, options.effectHandlers);
+    const ledger = options.storeDir
+      ? Ledger.open(join(options.storeDir, 'ledger.jsonl'))
+      : new Ledger();
+    const runtime = new Runtime({ ...options, ledger }, options.effectHandlers);
 
     runtime.ledger.append({
       type: 'mission.created',
@@ -127,6 +132,13 @@ export class Runtime {
       if (decision.approvalRequired) {
         const approved = await this.approve(handler.scope, claim.id);
         if (!approved) {
+          attributeFailure(
+            this.ledger,
+            VERIFIER,
+            featureId,
+            'context',
+            `approval-denied:${handler.scope}`,
+          );
           this.ledger.append({
             type: 'approval.denied',
             actor: PRINCIPAL,
@@ -140,6 +152,13 @@ export class Runtime {
           payload: { scope: handler.scope, claimEventId: claim.id },
         });
       } else {
+        attributeFailure(
+          this.ledger,
+          VERIFIER,
+          featureId,
+          'context',
+          decision.reason ?? 'not-authorized',
+        );
         return { ok: false, reason: decision.reason ?? 'not-authorized', featureId };
       }
     }

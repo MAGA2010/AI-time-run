@@ -56,6 +56,7 @@ export interface FeatureBinding {
 }
 
 export interface ManagedOptions {
+  ledger?: Ledger;
   mission: Mission;
   features: FeatureSpec[];
   grants: CapabilityGrant[];
@@ -72,7 +73,7 @@ export interface ManagedOptions {
 }
 
 export class ManagedRuntime {
-  readonly ledger = new Ledger();
+  readonly ledger: Ledger;
   readonly authority: AuthorityEngine;
   readonly constitution: Constitution;
   readonly sandbox = new Sandbox();
@@ -99,6 +100,7 @@ export class ManagedRuntime {
   private workspace: SelectiveWorkspace;
 
   private constructor(options: ManagedOptions) {
+    this.ledger = options.ledger ?? new Ledger();
     this.reasoner = options.reasoner;
     this.approve = options.approve ?? (() => true);
     this.maxRevisions = options.maxRevisions ?? 3;
@@ -128,7 +130,10 @@ export class ManagedRuntime {
   }
 
   static create(options: ManagedOptions): ManagedRuntime {
-    const runtime = new ManagedRuntime(options);
+    const ledger = options.storeDir
+      ? Ledger.open(join(options.storeDir, 'ledger.jsonl'))
+      : new Ledger();
+    const runtime = new ManagedRuntime({ ...options, ledger });
 
     runtime.ledger.append({
       type: 'mission.created',
@@ -256,6 +261,13 @@ export class ManagedRuntime {
           false,
         );
         if (!approved) {
+          attributeFailure(
+            this.ledger,
+            ROLES.evaluator,
+            featureId,
+            'context',
+            `approval-denied:${binding.scope}`,
+          );
           this.ledger.append({
             type: 'approval.denied',
             actor: ROLES.principal,
@@ -269,6 +281,13 @@ export class ManagedRuntime {
           payload: { scope: binding.scope, candidateId: candidate.eventId },
         });
       } else {
+        attributeFailure(
+          this.ledger,
+          ROLES.evaluator,
+          featureId,
+          'context',
+          decision.reason ?? 'not-authorized',
+        );
         return { ok: false, reason: decision.reason ?? 'not-authorized', featureId };
       }
     }

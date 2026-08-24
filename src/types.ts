@@ -5,6 +5,8 @@
  * State, Evidence, Authority, Coordination.
  */
 
+import type { Ledger } from './ledger.js';
+
 export type Timestamp = string;
 
 export type ActorRole =
@@ -113,7 +115,14 @@ export type EventType =
   | 'check.recorded'
   | 'constitution.amended'
   | 'evolution.gate'
-  | 'shutdown.requested';
+  | 'shutdown.requested'
+  | 'code.executed'
+  | 'code.feedback'
+  | 'code.retry'
+  | 'code.symbol_resolved'
+  | 'code.apply_patch'
+  | 'code.plan_recorded'
+  | 'code.escalate';
 
 export interface Event {
   id: string;
@@ -304,6 +313,7 @@ export interface EffectHandler {
 }
 
 export interface RuntimeOptions {
+  ledger?: Ledger;
   mission: Mission;
   features: FeatureSpec[];
   grants: CapabilityGrant[];
@@ -319,4 +329,74 @@ export interface RunResult {
   reason?: string;
   featureId?: string;
   eventId?: string;
+}
+
+// ============================================================================
+// BREAK 7 — CodeAgent Integration additions
+// ============================================================================
+
+/** A blame marker pointing at a specific source-code range (per LDB). */
+export interface BlockBlame {
+  file: string;
+  startLine: number;
+  endLine: number;
+  trace: string;
+  rule?: string;
+}
+
+/** A modular pseudo-code plan step (per CodeAgents 2025, token-efficient). */
+export type PseudoCodeStep =
+  | { kind: 'act'; tool: string; input: Record<string, unknown>; note?: string }
+  | { kind: 'observe'; probe: string }
+  | { kind: 'assert'; predicate: string; onFail?: 'retry' | 'rollback' | 'escalate' }
+  | { kind: 'branch'; cond: string; then: PseudoCodeStep[]; else: PseudoCodeStep[] };
+
+/** A plan expressed as a tree of pseudo-code steps. */
+export interface PseudoCodePlan {
+  id: string;
+  featureId: string;
+  claim: string;
+  steps: PseudoCodeStep[];
+  /** Optional serialized form for back-compat with Plan.steps: string[]. */
+  raw?: string;
+  /** Tokens saved vs an equivalent natural-language plan. */
+  tokensSaved?: number;
+}
+
+/** OpenAI Agents SDK v2-style workspace manifest. */
+export interface WorkspaceMount {
+  path: string;
+  source: string;
+  mode: 'read-only' | 'read-write';
+  snapshot?: boolean;
+  /** Ephemeral mounts do NOT enter cross-container snapshots. */
+  ephemeral?: boolean;
+  /** Secret names resolved by the harness; never enter the sandbox env. */
+  secrets?: string[];
+}
+
+export interface WorkspaceManifest {
+  mounts?: WorkspaceMount[];
+  env?: { public?: string[]; secrets?: string[] };
+  ports?: Array<{ port: number; mode: 'internal-only' | 'host-bound' }>;
+  startup?: string[];
+  dependencies?: Array<{ name: string; manager: 'pip' | 'npm' | 'apt' | 'brew' }>;
+}
+
+/** BREAK 7: code-cell execution result kind on the REPL side. */
+export interface CodeCellResult {
+  stdout: string;
+  stderr: string;
+  returncode: number;
+  elapsedMs: number;
+  /** Optional parsed traceback location (per LDB block-blame). */
+  blame?: BlockBlame[];
+}
+
+/** BREAK 7: AGENTS.md-style instruction chain. */
+export interface InstructionChain {
+  global: string;
+  repo: string;
+  cwd: string;
+  resolved: string;
 }

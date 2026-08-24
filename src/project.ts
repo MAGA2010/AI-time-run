@@ -44,9 +44,12 @@ function asMission(payload: Record<string, unknown>): Mission {
 }
 
 export function project(ledger: Ledger): Projection {
-  const state = emptyProjection();
+  let state = emptyProjection();
 
   for (const event of ledger.all()) {
+    if (event.type === 'mission.created') {
+      state = emptyProjection();
+    }
     apply(state, event);
   }
 

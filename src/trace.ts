@@ -45,6 +45,10 @@ function eventClass(event: { type: string }, flagged: Set<string>, id: string): 
   if (event.type === 'effect.reverted' || event.type === 'rollback.requested') {
     return 'row rolledback';
   }
+  // BREAK 7: highlight CodeAgent events so a reviewer can spot them at a glance.
+  if (event.type.startsWith('code.')) {
+    return 'row code-event';
+  }
   return 'row';
 }
 
@@ -162,6 +166,7 @@ export function renderTraceHtml(ledger: Ledger, options: TraceRenderOptions = {}
   .row.verified td { background: #f0fdf4; }
   .row.rolledback td { background: #fff7ed; }
   .row.forged td { background: #fef2f2; color: #991b1b; }
+  .row.code-event td { background: #eef2ff; color: #3730a3; }
   .seq { width: 48px; color: #9ca3af; }
   .type { width: 180px; }
   .actor { width: 110px; color: #6b7280; }

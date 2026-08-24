@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { runDemo } from './demo.js';
+import { runCodeAgentDemo, type CodeAgentVariant } from './code/demo.js';
 import { buildEpisode } from './episode.js';
+import { validateLedger } from './invariants.js';
 import { Ledger } from './ledger.js';
 import { renderTraceHtml } from './trace.js';
 import { ROLES } from './actors.js';
@@ -19,12 +21,21 @@ if (command === 'help' || command === undefined) {
   console.log('  ai-time-run episode [--store <dir>]   print the Episode audit package');
   console.log('  ai-time-run trace  --store <dir>      render dir/trace.html from dir/ledger.jsonl');
   console.log('  ai-time-run tamper --store <dir>      write forged-ledger.jsonl + forged-trace.html');
+  console.log('  ai-time-run codeagent [--variant codeact|self-debug|qa-review] [--store <dir>]');
+  console.log('                                       run a BREAK 7 CodeAgent scenario');
   process.exit(command === 'help' ? 0 : 1);
 }
 
 if (command === 'episode') {
-  const { runtime } = await runDemo(storeDir);
-  const episode = buildEpisode(runtime.ledger);
+  if (!storeDir) {
+    console.warn('warning: episode without --store runs in memory; pass --store <dir> when audit matters');
+    const { runtime } = await runDemo(storeDir);
+    const episode = buildEpisode(runtime.ledger);
+    console.log(JSON.stringify(episode, null, 2));
+    process.exit(0);
+  }
+  const ledger = Ledger.load(join(storeDir, 'ledger.jsonl'));
+  const episode = buildEpisode(ledger);
   console.log(JSON.stringify(episode, null, 2));
   process.exit(0);
 }
@@ -66,11 +77,38 @@ if (command === 'tamper') {
   });
   const forgedLedger = join(storeDir, 'forged-ledger.jsonl');
   ledger.save(forgedLedger);
+  const validation = validateLedger(ledger);
   const html = renderTraceHtml(ledger, { title: 'AI Time Run — forged trace' });
   const target = join(storeDir, 'forged-trace.html');
   writeFileSync(target, html, 'utf8');
   console.log(`forged ledger written to: ${forgedLedger}`);
   console.log(`forged trace written to: ${target}`);
+  console.log(
+    `forged validation: ${validation.ok ? 'UNEXPECTED OK' : 'VIOLATIONS: ' + validation.violations.join(', ')}`,
+  );
+  process.exit(1);
+}
+
+if (command === 'codeagent') {
+  const variantIndex = args.indexOf('--variant');
+  const variant = (variantIndex >= 0 ? args[variantIndex + 1] : 'codeact') as CodeAgentVariant;
+  if (!['codeact', 'self-debug', 'qa-review'].includes(variant)) {
+    console.error('unknown variant: ' + variant);
+    process.exit(1);
+  }
+  const { runtime, cellsExecuted } = await runCodeAgentDemo({ variant, storeDir });
+  const metrics = runtime.oversight.metrics();
+  const validation = runtime.validate();
+  const episode = runtime.episode();
+  console.log('\n== CodeAgent demo (' + variant + ') ==');
+  console.log('cells executed through interpreter: ' + cellsExecuted);
+  console.log('features ' + metrics.passingFeatures + '/' + metrics.totalFeatures + ' passing');
+  console.log('\n== Ledger integrity ==');
+  console.log(
+    runtime.ledger.length + ' events, ' + (validation.ok ? 'VALID' : 'VIOLATIONS: ' + validation.violations.join(', ')),
+  );
+  console.log('\n== Episode package ==');
+  console.log('harness level: ' + episode.harnessLevel);
   process.exit(0);
 }
 

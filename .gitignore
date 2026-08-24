@@ -1,4 +1,5 @@
 node_modules/
 dist/
+.tmp-aitr-fs-*/
 .ai-time-run/
 *.log

@@ -9,7 +9,7 @@ architecture and the 2026 Harness-Engineering papers.
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-38%20passing-green.svg)](tests/runtime.test.mjs)
+[![Tests](https://img.shields.io/badge/tests-48%20passing-green.svg)](tests/runtime.test.mjs)
 [![Stars](https://img.shields.io/github/stars/MAGA2010/AI-time-run?style=social)](https://github.com/MAGA2010/AI-time-run)
 
 ---
@@ -500,9 +500,9 @@ node dist/cli.js tamper --store ./data
 ```
 
 The demo runs four features and demonstrates authorized pass, approval gate,
-no-capability rejection, approval denial, and one constitutional revision. The
-expected output includes `57 events, VALID`, `harness level: H2`, and
-`responsibilities: 10/11 covered`.
+no-capability rejection, approval denial, failure attribution, and one
+constitutional revision. The expected output includes `64 events, VALID`,
+`harness level: H3`, and `responsibilities: 11/11 covered`.
 
 ---
 
@@ -539,6 +539,9 @@ Full docs live under [docs/](docs/):
 - [10-openai-evals.md](docs/10-openai-evals.md) — OpenAI Evals mapped into the runtime
 - [11-break4-wal.md](docs/11-break4-wal.md) — BREAK 4: tamper-evident WAL + idempotent effects
 - [12-break5-misevolution.md](docs/12-break5-misevolution.md) — BREAK 5: misevolution guardrails around self-amendment
+- [13-break7-codeagent-integration.md](docs/13-break7-codeagent-integration.md) — BREAK 7: CodeAgent integration design
+- [14-codeagent-study-notes.md](docs/14-codeagent-study-notes.md) — CodeAgent & OpenAI learning notes
+- [15-break7-skill-md-snippet.md](docs/15-break7-skill-md-snippet.md) — SKILL.md upgrade snippet (paste into Codex)
 
 ---
 

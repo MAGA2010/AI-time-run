@@ -146,6 +146,11 @@ export class Ledger {
     ledger.seq = seq;
     return ledger;
   }
+
+  static open(path: string): Ledger {
+    const target = resolve(path);
+    return existsSync(target) ? Ledger.load(target) : new Ledger();
+  }
 }
 
 function hashEvent(event: Event): string {

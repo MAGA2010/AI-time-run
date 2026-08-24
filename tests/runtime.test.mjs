@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import os from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 
@@ -466,7 +465,7 @@ test('selective workspace truncates to budget', () => {
 });
 
 test('filesystem adapter enforces root and round-trips writes', () => {
-  const dir = join(os.tmpdir(), `aitr-fs-${Date.now()}`);
+  const dir = join(process.cwd(), `.tmp-aitr-fs-${Date.now()}`);
   const fs = new FileSystemAdapter(dir);
 
   fs.write('a.txt', 'hello');
