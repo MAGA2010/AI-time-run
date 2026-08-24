@@ -12,6 +12,7 @@ import { ManagedRuntime } from './orchestrator.js';
 import type { FeatureBinding } from './orchestrator.js';
 import { ROLES } from './actors.js';
 import type {
+  FeatureCheck,
   FeatureSpec,
   Probe,
   Reasoner,
@@ -149,11 +150,61 @@ export function buildDemoOptions(storeDir?: string) {
     },
   ];
 
+
+  /**
+   * Fresh-context deterministic checks: each check is pinned to a semantic
+   * version so the harness can refuse verdicts against a stale rubric.
+   * The check exposes structured gaps + measurements that ride on the
+   * check.recorded event for downstream auditors.
+   */
+  const checks: FeatureCheck[] = [
+    {
+      id: 'scaffold-renders',
+      requirement: 'scaffolded shell passes a sanity probe',
+      version: '1.0.0',
+      verify: () => ({
+        ok: world.scaffolded,
+        gaps: world.scaffolded ? [] : ['shell-not-initialised'],
+        measurements: { scaffolded: world.scaffolded },
+      }),
+    },
+    {
+      id: 'persist-durable',
+      requirement: 'persisted data survives a snapshot/restore round-trip',
+      version: '1.0.0',
+      verify: () => ({
+        ok: world.persisted,
+        gaps: world.persisted ? [] : ['fs-not-persisted'],
+        measurements: { persisted: world.persisted },
+      }),
+    },
+    {
+      id: 'sync-reconciled',
+      requirement: 'remote side matches local state after sync',
+      version: '1.0.0',
+      verify: () => ({
+        ok: world.synced,
+        gaps: world.synced ? [] : ['http-not-reconciled'],
+        measurements: { synced: world.synced },
+      }),
+    },
+    {
+      id: 'report-exported',
+      requirement: 'exported report exists on disk',
+      version: '1.0.0',
+      verify: () => ({
+        ok: world.exported,
+        gaps: world.exported ? [] : ['report-not-exported'],
+        measurements: { exported: world.exported },
+      }),
+    },
+  ];
+
   const bindings: FeatureBinding[] = [
-    { featureId: 'scaffold', toolName: 'ui', probeId: 'ui-probe', scope: 'ui' },
-    { featureId: 'persist', toolName: 'fs', probeId: 'fs-probe', scope: 'fs' },
-    { featureId: 'sync', toolName: 'http', probeId: 'http-probe', scope: 'http' },
-    { featureId: 'export', toolName: 'report', probeId: 'report-probe', scope: 'report' },
+    { featureId: 'scaffold', toolName: 'ui', probeId: 'ui-probe', scope: 'ui', checks: [checks[0]] },
+    { featureId: 'persist', toolName: 'fs', probeId: 'fs-probe', scope: 'fs', checks: [checks[1]] },
+    { featureId: 'sync', toolName: 'http', probeId: 'http-probe', scope: 'http', checks: [checks[2]] },
+    { featureId: 'export', toolName: 'report', probeId: 'report-probe', scope: 'report', checks: [checks[3]] },
   ];
 
   const options = {

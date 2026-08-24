@@ -55,13 +55,26 @@ export interface FeatureSpec {
   steps: string[];
 }
 
-/** A deterministic, model-independent requirement check (fresh-context verifier). */
+export interface CheckResult {
+  ok: boolean;
+  /** Named gaps that the check identified but did not auto-repair. */
+  gaps?: string[];
+  detail?: string;
+  /** Optional structured measurements (latency, count, ratio). */
+  measurements?: Record<string, number | string | boolean>;
+}
+
+/**
+ * A deterministic, model-independent requirement check (fresh-context verifier).
+ * Each check is pinned to a semantic version so the harness can refuse verdicts
+ * against a stale rubric.
+ */
 export interface FeatureCheck {
   id: string;
   requirement: string;
-  verify: () =>
-    | { ok: boolean; detail?: string }
-    | Promise<{ ok: boolean; detail?: string }>;
+  /** Semantic version of the rubric; bumped on every meaningful change. */
+  version: string;
+  verify: () => CheckResult | Promise<CheckResult>;
 }
 
 export type EventType =
@@ -87,6 +100,7 @@ export type EventType =
   | 'feature.updated'
   | 'belief.asserted'
   | 'belief.retracted'
+  | 'effect.intent'
   | 'simulation.recorded'
   | 'conjecture.recorded'
   | 'conjecture.resolved'
@@ -98,6 +112,7 @@ export type EventType =
   | 'oversight.escalated'
   | 'check.recorded'
   | 'constitution.amended'
+  | 'evolution.gate'
   | 'shutdown.requested';
 
 export interface Event {
@@ -111,6 +126,12 @@ export interface Event {
   parent?: string;
   /** Backing evidence event id, when the event is evidence-grounded. */
   evidence?: string;
+  /** SHA-256 hash of the canonical form of the previous event (genesis = 64 zeros). */
+  prevHash: string;
+  /** SHA-256 hash of the canonical form of this event. */
+  hash: string;
+  /** Optional idempotency key mirrored into payload for visibility. */
+  idempotencyKey?: string;
 }
 
 export interface Claim {

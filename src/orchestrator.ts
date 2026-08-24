@@ -200,7 +200,7 @@ export class ManagedRuntime {
       results.push(await this.runFeature(featureId));
     }
     this.oversight.escalate();
-    this.evolver.evolve(this.ledger, this.constitution, this.evolveThreshold);
+    await this.evolver.evolve(this.ledger, this.constitution, this.evolveThreshold);
     return results;
   }
 
@@ -274,6 +274,20 @@ export class ManagedRuntime {
     }
 
     const tool = this.sandbox.tool(binding.toolName);
+    const intentKey = `effect:${featureId}:${binding.toolName}:${binding.scope}`;
+    const intentEvent = this.ledger.append({
+      type: 'effect.intent',
+      actor: ROLES.planner,
+      payload: {
+        scope: binding.scope,
+        featureId,
+        toolName: binding.toolName,
+        description: tool?.description ?? binding.toolName,
+        candidateId: candidate.eventId,
+      },
+      parent: candidate.eventId,
+      idempotencyKey: intentKey,
+    });
     const requested = this.ledger.append({
       type: 'effect.requested',
       actor: ROLES.generator,
@@ -281,8 +295,10 @@ export class ManagedRuntime {
         scope: binding.scope,
         featureId,
         requested: tool?.description ?? binding.toolName,
+        intentEventId: intentEvent.id,
+        idempotencyKey: intentKey,
       },
-      parent: candidate.eventId,
+      parent: intentEvent.id,
     });
     this.ledger.append({
       type: 'checkpoint.created',
@@ -291,7 +307,7 @@ export class ManagedRuntime {
       parent: requested.id,
     });
 
-    const result = await this.sandbox.execute(binding.toolName, { featureId });
+    const result = await this.sandbox.execute(binding.toolName, { featureId }, { featureId, payload: { featureId } });
     this.ledger.append({
       type: 'effect.actualized',
       actor: ROLES.generator,
@@ -358,8 +374,11 @@ export class ManagedRuntime {
     // environment, not the generator's candidate, so the model cannot self-certify.
     const checks = binding.checks ?? [];
     let checksOk = true;
+    const recordedVersions: Record<string, string> = {};
     for (const check of checks) {
       const result = await check.verify();
+      recordedVersions[check.id] = check.version;
+      const checkResult = result;
       this.ledger.append({
         type: 'check.recorded',
         actor: ROLES.evaluator,
@@ -367,8 +386,11 @@ export class ManagedRuntime {
           featureId,
           checkId: check.id,
           requirement: check.requirement,
-          ok: result.ok,
-          detail: result.detail,
+          version: check.version,
+          ok: checkResult.ok,
+          detail: checkResult.detail,
+          gaps: checkResult.gaps ?? [],
+          measurements: checkResult.measurements ?? {},
         },
         parent: evidenceEvent.id,
       });
@@ -379,7 +401,7 @@ export class ManagedRuntime {
       this.ledger.append({
         type: 'effect.verified',
         actor: ROLES.evaluator,
-        payload: { scope: binding.scope, featureId },
+        payload: { scope: binding.scope, featureId, checkVersions: recordedVersions },
         parent: requested.id,
         evidence: evidenceEvent.id,
       });
@@ -419,7 +441,7 @@ export class ManagedRuntime {
     return auditEntropy(this.ledger, ROLES.observer);
   }
 
-  evolve(): string[] {
+  async evolve(): Promise<string[]> {
     return this.evolver.evolve(this.ledger, this.constitution, this.evolveThreshold);
   }
 

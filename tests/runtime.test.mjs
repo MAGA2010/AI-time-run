@@ -528,7 +528,7 @@ test('a failing deterministic check rejects and rolls back the feature', async (
   assert.equal(runtime.ledger.byType('check.recorded')[0].payload.ok, false);
 });
 
-test('harness evolves a new principle from recurring failures', () => {
+test('harness evolves a new principle from recurring failures', async () => {
   const ledger = new Ledger();
   const constitution = new Constitution([{ id: 'safe', statement: 'no UNSAFE' }]);
   ledger.append({
@@ -542,7 +542,7 @@ test('harness evolves a new principle from recurring failures', () => {
     payload: { featureId: 'f1', failureType: 'verify' },
   });
 
-  const learned = new HarnessEvolver().evolve(ledger, constitution, 2);
+  const learned = await new HarnessEvolver().evolve(ledger, constitution, 2);
 
   assert.equal(learned.length, 1);
   assert.equal(constitution.rules.length, 2);
@@ -551,4 +551,150 @@ test('harness evolves a new principle from recurring failures', () => {
     ledger.byType('constitution.amended')[0].payload.failureType,
     'verify',
   );
+});
+
+test('ledger builds a tamper-evident hash chain with prevHash/hash linkage', () => {
+  const ledger = new Ledger();
+  const a = ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'a' } });
+  const b = ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'b' } });
+  const c = ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'c' } });
+
+  assert.equal(a.prevHash, '0'.repeat(64));
+  assert.equal(b.prevHash, a.hash);
+  assert.equal(c.prevHash, b.hash);
+  assert.equal(a.hash.length, 64);
+  assert.equal(b.hash.length, 64);
+  assert.notEqual(a.hash, b.hash);
+
+  const result = validateLedger(ledger);
+  assert.equal(result.ok, true);
+  assert.equal(result.chainChecked, 3);
+});
+
+test('validator detects a tampered event in the hash chain', () => {
+  const ledger = new Ledger();
+  ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'a' } });
+  ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'b' } });
+  ledger.append({ type: 'plan.recorded', actor: 'planner', payload: { goal: 'c' } });
+
+  const events = ledger.all();
+  events[1].payload = { goal: 'tampered' };
+  const result = validateLedger(ledger);
+  assert.equal(result.ok, false);
+  assert.ok(result.violations.some((v) => v.startsWith('chain-broken:')));
+});
+
+test('effect.intent is recorded before effect.requested with matching idempotency key', async () => {
+  const { runtime } = makeManagedRuntime();
+  await runtime.runFeature('f1');
+  const intent = runtime.ledger.byType('effect.intent')[0];
+  const requested = runtime.ledger.byType('effect.requested')[0];
+  assert.ok(intent);
+  assert.ok(requested);
+  assert.equal(requested.parent, intent.id);
+  assert.equal(intent.payload.idempotencyKey, requested.payload.idempotencyKey);
+});
+
+test('sandbox dedupes repeat tool calls by idempotency key', async () => {
+  const { runtime } = makeManagedRuntime();
+  await runtime.runFeature('f1');
+  const first = await runtime.sandbox.execute('tool', { featureId: 'f1' }, { featureId: 'f1', payload: { featureId: 'f1' } });
+  const second = await runtime.sandbox.execute('tool', { featureId: 'f1' }, { featureId: 'f1', payload: { featureId: 'f1' } });
+  assert.equal(first.ok, true);
+  assert.equal(second.deduped, true);
+  assert.equal(second.ok, true);
+});
+
+test('check.recorded carries version, gaps, and measurements', async () => {
+  const { runtime } = makeManagedRuntime({
+    checks: [
+      {
+        id: 'gappy',
+        requirement: 'checks for two named gaps',
+        version: '1.2.0',
+        verify: () => ({
+          ok: false,
+          gaps: ['shell-not-initialised', 'fs-not-persisted'],
+          detail: 'half-done',
+          measurements: { shell: false, fs: false, ratio: 0.0 },
+        }),
+      },
+    ],
+  });
+
+  const result = await runtime.runFeature('f1');
+  assert.equal(result.ok, false);
+  const event = runtime.ledger.byType('check.recorded')[0];
+  assert.equal(event.payload.version, '1.2.0');
+  assert.deepEqual(event.payload.gaps, ['shell-not-initialised', 'fs-not-persisted']);
+  assert.equal(event.payload.measurements.ratio, 0.0);
+});
+
+test('harness evolver respects cooldown window against repeat failures', async () => {
+  const ledger = new Ledger();
+  const constitution = new Constitution([{ id: 'safe', statement: 'no UNSAFE' }]);
+  for (let i = 0; i < 4; i += 1) {
+    ledger.append({
+      type: 'failure.attributed',
+      actor: ROLES.evaluator,
+      payload: { featureId: 'f1', failureType: 'verify' },
+    });
+  }
+  const evolver = new HarnessEvolver();
+  const first = await evolver.evolveDetailed(ledger, constitution, { threshold: 2, cooldownMs: 60_000 });
+  assert.equal(first.learned.length, 1);
+  const second = await evolver.evolveDetailed(ledger, constitution, { threshold: 2, cooldownMs: 60_000 });
+  assert.equal(second.learned.length, 0);
+  assert.equal(ledger.byType('constitution.amended').length, 1);
+});
+
+test('harness evolver refuses an amendment that regresses the eval suite', async () => {
+  const ledger = new Ledger();
+  const constitution = new Constitution([{ id: 'safe', statement: 'no UNSAFE' }]);
+  ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f1', failureType: 'verify' },
+  });
+  ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f1', failureType: 'verify' },
+  });
+  const evolver = new HarnessEvolver();
+  const result = await evolver.evolveDetailed(ledger, constitution, {
+    threshold: 2,
+    regressionEval: () => ({ ok: false, sampleIds: ['s1', 's2'] }),
+  });
+  assert.equal(result.learned.length, 0);
+  assert.equal(result.refused.length, 1);
+  assert.equal(ledger.byType('constitution.amended').length, 0);
+  const escalation = ledger.byType('oversight.escalated')[0];
+  assert.equal(escalation.payload.reason, 'regression-gate-refused-amendment');
+  assert.deepEqual(escalation.payload.evalSamples, ['s1', 's2']);
+});
+
+test('constitution.amended payload carries evidence ids, eval samples, and a diff', async () => {
+  const ledger = new Ledger();
+  const constitution = new Constitution([{ id: 'safe', statement: 'no UNSAFE' }]);
+  const a = ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f1', failureType: 'verify' },
+  });
+  const b = ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f2', failureType: 'verify' },
+  });
+  await new HarnessEvolver().evolveDetailed(ledger, constitution, {
+    threshold: 2,
+    regressionEval: () => ({ ok: true, sampleIds: ['eval-1'] }),
+  });
+  const amendment = ledger.byType('constitution.amended')[0];
+  assert.deepEqual(amendment.payload.evidenceEventIds, [a.id, b.id]);
+  assert.deepEqual(amendment.payload.evalSampleIds, ['eval-1']);
+  assert.equal(amendment.payload.diff.after, amendment.payload.statement);
+  assert.equal(amendment.payload.diff.failureType, 'verify');
+  assert.equal(amendment.payload.cooldownMs, 60_000);
 });

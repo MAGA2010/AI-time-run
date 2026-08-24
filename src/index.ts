@@ -1,4 +1,5 @@
-export { Ledger } from './ledger.js';
+export { Ledger, GENESIS_HASH, sha256, idempotencyKeyFor } from './ledger.js';
+export type { AppendInput, IdempotencyHit } from './ledger.js';
 export { project, isClaimVerified } from './project.js';
 export { replay, slice, summarize } from './session.js';
 export { CausalGraph, classifyEffect } from './causal.js';
@@ -20,6 +21,7 @@ export { renderTraceHtml } from './trace.js';
 export { IdentityEngine } from './identity.js';
 export type { Identity } from './identity.js';
 export { HarnessEvolver } from './evolver.js';
+export type { EvolveOptions, EvolveResult, RegressionEval, RegressionEvalResult } from './evolver.js';
 export { SelectiveWorkspace } from './workspace.js';
 export type { WorkspacePolicy } from './workspace.js';
 export { FileSystemAdapter, makeFileProbe, makeFileTool } from './environment.js';
@@ -62,6 +64,7 @@ export type {
   Evaluation,
   Event,
   Feature,
+  CheckResult,
   FeatureCheck,
   FeatureSpec,
   Mission,

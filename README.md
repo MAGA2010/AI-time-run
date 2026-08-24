@@ -9,7 +9,7 @@ architecture and the 2026 Harness-Engineering papers.
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-30%20passing-green.svg)](tests/runtime.test.mjs)
+[![Tests](https://img.shields.io/badge/tests-38%20passing-green.svg)](tests/runtime.test.mjs)
 [![Stars](https://img.shields.io/github/stars/MAGA2010/AI-time-run?style=social)](https://github.com/MAGA2010/AI-time-run)
 
 ---
@@ -318,6 +318,103 @@ flowchart LR
 
 ---
 
+
+### BREAK 4 — Tamper-evident WAL + idempotent effects
+
+Every effect now writes a two-phase log with a SHA-256 hash chain. The
+planner first appends an `effect.intent` event carrying the idempotency
+key; the generator then appends `effect.requested` with the same key as a
+child. Tool execution reuses the SHA-256 of `{tool, scope, featureId,
+payload}` so a retry collapses onto the prior outcome instead of running
+the side effect twice.
+
+```mermaid
+flowchart LR
+  classDef chain fill:#ecfeff,stroke:#0891b2,color:#1f2937;
+  classDef cache fill:#f5f3ff,stroke:#7c3aed,color:#1f2937;
+  classDef ledger fill:#f0fdf4,stroke:#16a34a,color:#1f2937;
+
+  INTENT["Planner<br/>effect.intent<br/>idempotencyKey"]:::chain
+  REQ["Generator<br/>effect.requested<br/>child=intent"]:::chain
+  ACTUAL["Sandbox<br/>effect.actualized"]:::chain
+  KEY["sha256(tool, scope,<br/>featureId, payload)"]:::cache
+  CACHE{{"Sandbox cache<br/>first hit returns deduped=true"}}:::cache
+  HASH["prevHash = H(eve−1)<br/>hash = SHA256(canon(eve))"]:::ledger
+  CHAIN["Ledger<br/>rehash on load<br/>chain-checked = 61"]:::ledger
+
+  INTENT --> REQ --> ACTUAL
+  REQ -.-> KEY
+  KEY -.-> CACHE
+  INTENT -.-> HASH
+  REQ -.-> HASH
+  ACTUAL -.-> HASH
+  HASH --> CHAIN
+```
+
+What this buys:
+
+- **Replay safety**: `Ledger.load()` re-walks the hash chain on every read;
+  a single bit flip in any event crashes the load with
+  `ledger-chain-broken`.
+- **Idempotent side effects**: `Sandbox.execute()` returns `deduped: true`
+  on retries so checkpoint-restore + retry never double-applies a tool.
+- **Fresh-context audit**: `validateLedger()` now reports
+  `chainChecked: N` so a reviewer knows how many events were independently
+  re-hashed.
+- **Effect chain completeness**: every `effect.verified` event is reachable
+  from an `effect.intent` WAL ancestor — auditors can reconstruct the
+  intent -> request -> actualized -> verified trail.
+
+### BREAK 5 — Misevolution guardrails around constitution amendment
+
+The self-evolving harness now treats `constitution.amended` as a
+first-class mutation that needs three guardrails (Your Agent May Misevolve,
+arXiv 2509.26354):
+
+1. **Cooldown window.** One amendment per failure type per
+   `cooldownMs` window (default 60 000 ms). A flood of `verify`
+   failures does not flood the constitution.
+2. **Regression gate.** The `HarnessEvolver.evolveDetailed({ regressionEval
+   })` API accepts an async `RegressionEval` that re-runs prior passing
+   features against the candidate principle. If the eval returns
+   `{ ok: false }`, the amendment is refused and an
+   `oversight.escalated` event with reason `regression-gate-refused-amendment`
+   is appended instead of the principle being added.
+3. **Grounded payload.** Every amendment now carries `evidenceEventIds`,
+   `evalSampleIds`, and a textual `diff` block so a fresh-context auditor
+   can prove the change is grounded in real evidence and real eval samples,
+   not just a heuristic counter.
+
+```mermaid
+flowchart TB
+  classDef ok fill:#ecfdf5,stroke:#16a34a,color:#1f2937;
+  classDef no fill:#fef2f2,stroke:#dc2626,color:#1f2937;
+
+  FAIL["failure.attributed x >= threshold"]:::ok
+  COOLDOWN{"cooldownMs 内<br/>已修正过?"}:::ok
+  REG{"regressionEval<br/>ok?"}:::ok
+  AMEND["constitution.amended<br/>+ evidenceEventIds<br/>+ evalSampleIds<br/>+ diff"]:::ok
+  REFUSE["oversight.escalated<br/>reason=regression-gate-refused-amendment"]:::no
+
+  FAIL --> COOLDOWN
+  COOLDOWN -->|"否"| REG
+  COOLDOWN -->|"是"| SKIP["skip<br/>cooldown active"]:::no
+  REG -->|"ok=true"| AMEND
+  REG -->|"ok=false"| REFUSE
+  REG -->|"threw"| THREW["oversight.escalated<br/>reason=regression-eval-threw"]:::no
+```
+
+What this buys:
+
+- **No silent regressions**: a regression eval gate catches the case where a
+  new principle fixes one failure type but breaks another.
+- **Audit-friendly amendments**: every `constitution.amended` event is now
+  self-evidencing — auditors do not have to take the evolver's word.
+- **Cooldown stability**: the constitution cannot grow faster than the
+  cooldown window, which keeps the critic from oscillating.
+
+---
+
 ## V18 primitives mapped to AI Time Run
 
 | MDIBUS module | AI Time Run implementation | Status |
@@ -440,6 +537,8 @@ Full docs live under [docs/](docs/):
 - [08-v18-deep-study.md](docs/08-v18-deep-study.md) — complete V18 study notes
 - [09-harness-merge.md](docs/09-harness-merge.md) — DeepSeek × ChatGPT/Codex harness merge
 - [10-openai-evals.md](docs/10-openai-evals.md) — OpenAI Evals mapped into the runtime
+- [11-break4-wal.md](docs/11-break4-wal.md) — BREAK 4: tamper-evident WAL + idempotent effects
+- [12-break5-misevolution.md](docs/12-break5-misevolution.md) — BREAK 5: misevolution guardrails around self-amendment
 
 ---
 
