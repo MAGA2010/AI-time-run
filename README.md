@@ -542,6 +542,7 @@ Full docs live under [docs/](docs/):
 - [13-break7-codeagent-integration.md](docs/13-break7-codeagent-integration.md) — BREAK 7: CodeAgent integration design
 - [14-codeagent-study-notes.md](docs/14-codeagent-study-notes.md) — CodeAgent & OpenAI learning notes
 - [15-break7-skill-md-snippet.md](docs/15-break7-skill-md-snippet.md) — SKILL.md upgrade snippet (paste into Codex)
+- [16-break7-algorithms.md](docs/16-break7-algorithms.md) — BREAK 7 algorithm reference (12 techniques)
 
 ---
 
