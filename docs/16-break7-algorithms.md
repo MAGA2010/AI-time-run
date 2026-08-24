@@ -331,3 +331,14 @@ belief.asserted + episodic.remember
 | **总计** | **~1140** | — |
 
 **测试覆盖**：10 个新单元测试 / 48 总测试，100% 通过。
+
+---
+
+## See also
+
+- `docs/13-break7-codeagent-integration.md` — design spec for BREAK 7
+- `docs/14-codeagent-study-notes.md` — first-pass breadth study (8 papers + 3 OAI products)
+- **`docs/17-deep-study.md`** — second-pass deep dive: actual algorithms, prompts,
+  reverse-engineered architecture, and cost numbers for CodeAct MINT, OAI Code
+  Interpreter / Coworker, SWE-Agent ACI, JoyCode Fail2Pass/Pass2Pass, and
+  mini-SWE-agent. Source of truth for the v0.2 roadmap.
