@@ -32,6 +32,7 @@ import {
   IdentityEngine,
   SelectiveWorkspace,
   FileSystemAdapter,
+  HarnessEvolver,
 } from '../dist/index.js';
 
 function makeWorld() {
@@ -158,7 +159,7 @@ test('validator rejects forged passes and forged verifications', () => {
   assert.ok(result.violations.some((v) => v.startsWith('unverified-effect')));
 });
 
-function makeManagedRuntime({ failCritiqueOnce = true, toolThrows = false } = {}) {
+function makeManagedRuntime({ failCritiqueOnce = true, toolThrows = false, checks } = {}) {
   const world = { done: false };
   const options = {
     mission: {
@@ -194,7 +195,7 @@ function makeManagedRuntime({ failCritiqueOnce = true, toolThrows = false } = {}
         summary: 'evidence-backed',
       }),
     },
-    bindings: [{ featureId: 'f1', toolName: 'tool', probeId: 'probe', scope: 'tool' }],
+    bindings: [{ featureId: 'f1', toolName: 'tool', probeId: 'probe', scope: 'tool', checks }],
     tools: [
       {
         name: 'tool',
@@ -498,4 +499,56 @@ test('oversight escalates and revokes the offending capability', () => {
   assert.equal(ledger.byType('oversight.escalated').length, 1);
   assert.equal(ledger.byType('grant.revoked').length, 1);
   assert.equal(ledger.byType('grant.revoked')[0].payload.grantId, grantIssued.id);
+});
+
+test('fresh-context deterministic checks gate a feature', async () => {
+  const { runtime } = makeManagedRuntime({
+    checks: [{ id: 'c1', requirement: 'world done', verify: () => ({ ok: true }) }],
+  });
+
+  const result = await runtime.runFeature('f1');
+  assert.equal(result.ok, true);
+  const checkEvents = runtime.ledger.byType('check.recorded');
+  assert.equal(checkEvents.length, 1);
+  assert.equal(checkEvents[0].payload.ok, true);
+  assert.equal(checkEvents[0].payload.requirement, 'world done');
+});
+
+test('a failing deterministic check rejects and rolls back the feature', async () => {
+  const { runtime, world } = makeManagedRuntime({
+    checks: [
+      { id: 'c1', requirement: 'must fail', verify: () => ({ ok: false, detail: 'nope' }) },
+    ],
+  });
+
+  const result = await runtime.runFeature('f1');
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'verification-failed-and-rolled-back');
+  assert.equal(world.done, false);
+  assert.equal(runtime.ledger.byType('check.recorded')[0].payload.ok, false);
+});
+
+test('harness evolves a new principle from recurring failures', () => {
+  const ledger = new Ledger();
+  const constitution = new Constitution([{ id: 'safe', statement: 'no UNSAFE' }]);
+  ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f1', failureType: 'verify' },
+  });
+  ledger.append({
+    type: 'failure.attributed',
+    actor: ROLES.evaluator,
+    payload: { featureId: 'f1', failureType: 'verify' },
+  });
+
+  const learned = new HarnessEvolver().evolve(ledger, constitution, 2);
+
+  assert.equal(learned.length, 1);
+  assert.equal(constitution.rules.length, 2);
+  assert.equal(ledger.byType('constitution.amended').length, 1);
+  assert.equal(
+    ledger.byType('constitution.amended')[0].payload.failureType,
+    'verify',
+  );
 });

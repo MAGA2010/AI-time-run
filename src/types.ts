@@ -55,6 +55,15 @@ export interface FeatureSpec {
   steps: string[];
 }
 
+/** A deterministic, model-independent requirement check (fresh-context verifier). */
+export interface FeatureCheck {
+  id: string;
+  requirement: string;
+  verify: () =>
+    | { ok: boolean; detail?: string }
+    | Promise<{ ok: boolean; detail?: string }>;
+}
+
 export type EventType =
   | 'mission.created'
   | 'grant.issued'
@@ -87,6 +96,8 @@ export type EventType =
   | 'entropy.audited'
   | 'identity.bound'
   | 'oversight.escalated'
+  | 'check.recorded'
+  | 'constitution.amended'
   | 'shutdown.requested';
 
 export interface Event {

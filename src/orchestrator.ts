@@ -15,6 +15,7 @@ import { ConjectureScheduler, Simulator } from './cognition.js';
 import { Constitution } from './constitution.js';
 import { attributeFailure, auditEntropy, buildEpisode, recordIntervention } from './episode.js';
 import { recordClaim } from './evidence.js';
+import { HarnessEvolver } from './evolver.js';
 import { IdentityEngine } from './identity.js';
 import { Ledger } from './ledger.js';
 import {
@@ -35,6 +36,7 @@ import { SelectiveWorkspace } from './workspace.js';
 import type {
   CapabilityGrant,
   Feature,
+  FeatureCheck,
   FeatureSpec,
   Mission,
   Plan,
@@ -50,6 +52,7 @@ export interface FeatureBinding {
   toolName: string;
   probeId: string;
   scope: string;
+  checks?: FeatureCheck[];
 }
 
 export interface ManagedOptions {
@@ -64,6 +67,7 @@ export interface ManagedOptions {
   highImpactScopes: Set<string>;
   approve?: (scope: string, detail: string) => Promise<boolean> | boolean;
   maxRevisions?: number;
+  evolveThreshold?: number;
   storeDir?: string;
 }
 
@@ -82,6 +86,7 @@ export class ManagedRuntime {
   readonly simulator: Simulator;
   readonly conjectures: ConjectureScheduler;
   readonly identity = new IdentityEngine();
+  readonly evolver = new HarnessEvolver();
 
   private reasoner: Reasoner;
   private probes = new Map<string, Probe>();
@@ -89,6 +94,7 @@ export class ManagedRuntime {
   private highImpactScopes: Set<string>;
   private approve: (scope: string, detail: string) => Promise<boolean> | boolean;
   private maxRevisions: number;
+  private evolveThreshold: number;
   private storeDir: string | undefined;
   private workspace: SelectiveWorkspace;
 
@@ -96,6 +102,7 @@ export class ManagedRuntime {
     this.reasoner = options.reasoner;
     this.approve = options.approve ?? (() => true);
     this.maxRevisions = options.maxRevisions ?? 3;
+    this.evolveThreshold = options.evolveThreshold ?? 2;
     this.storeDir = options.storeDir;
     this.progress = new ProgressJournal(options.storeDir);
     this.artifacts = new ArtifactStore(options.storeDir);
@@ -193,6 +200,7 @@ export class ManagedRuntime {
       results.push(await this.runFeature(featureId));
     }
     this.oversight.escalate();
+    this.evolver.evolve(this.ledger, this.constitution, this.evolveThreshold);
     return results;
   }
 
@@ -345,7 +353,28 @@ export class ManagedRuntime {
       parent: evidenceEvent.id,
     });
 
-    if (assessment.ok && evaluation.ok) {
+    // Fresh-context deterministic verification: these checks see the observed
+    // environment, not the generator's candidate, so the model cannot self-certify.
+    const checks = binding.checks ?? [];
+    let checksOk = true;
+    for (const check of checks) {
+      const result = await check.verify();
+      this.ledger.append({
+        type: 'check.recorded',
+        actor: ROLES.evaluator,
+        payload: {
+          featureId,
+          checkId: check.id,
+          requirement: check.requirement,
+          ok: result.ok,
+          detail: result.detail,
+        },
+        parent: evidenceEvent.id,
+      });
+      if (!result.ok) checksOk = false;
+    }
+
+    if (assessment.ok && evaluation.ok && checksOk) {
       this.ledger.append({
         type: 'effect.verified',
         actor: ROLES.evaluator,
@@ -387,6 +416,10 @@ export class ManagedRuntime {
 
   auditEntropy() {
     return auditEntropy(this.ledger, ROLES.observer);
+  }
+
+  evolve(): string[] {
+    return this.evolver.evolve(this.ledger, this.constitution, this.evolveThreshold);
   }
 
   shutdown(reason = 'operator requested shutdown') {
