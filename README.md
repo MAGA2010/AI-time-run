@@ -2,10 +2,19 @@
 
 > **Autonomous agents need a ledger they cannot lie in.**
 
+> 👤 **Author & Copyright Holder:** **MAGA2010**  
+> 🏁 **All source code, design, architecture, tests, and documentation in this repository were independently created by MAGA2010.**  
+> 📜 **License:** MIT — © 2026 MAGA2010. See [LICENSE](LICENSE) for the full text.  
+> 🌐 **Repository:** [github.com/MAGA2010/AI-time-run](https://github.com/MAGA2010/AI-time-run)
+
 A managed-agent runtime that decouples the brain from the hands and turns every
 run into an auditable, event-sourced Episode. Built from the MDIBUS V18
 architecture and the 2026 Harness-Engineering papers.
 
+**Designed, architected, implemented, tested, and documented by MAGA2010.** Every module under [`src/`](src/), every test under [`tests/`](tests/), and every research note under [`docs/`](docs/) is the original work of MAGA2010 unless an external source is explicitly cited inline (e.g. SWE-Agent ACI, JoyCode, CodeAct, OAI Coworker, mini-SWE-agent, MDIBUS V18).
+
+[![Author](https://img.shields.io/badge/author-MAGA2010-1f6feb?style=flat-square)](https://github.com/MAGA2010)
+[![Copyright](https://img.shields.io/badge/%C2%A9-2026%20MAGA2010-blueviolet?style=flat-square)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.2.0-blue)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
@@ -615,9 +624,43 @@ for any change. Keep a new module testable and wired into the Episode package.
 
 ---
 
-## License
+## Copyright & License
 
-[MIT](LICENSE) — © 2026 MAGA2010
+This project, **AI Time Run**, is the original work of **MAGA2010**.
+
+- **Author / Copyright Holder:** MAGA2010
+- **Copyright Year:** 2026
+- **License:** [MIT](LICENSE)
+- **Notice:** © 2026 MAGA2010. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, **subject to the condition that the name of MAGA2010 and
+this copyright notice appear in all copies or substantial portions of the
+Software**.
+
+The full license text is available in the [LICENSE](LICENSE) file.
+
+### What MAGA2010 built in this repository
+
+| Layer | What MAGA2010 authored | Where it lives |
+| --- | --- | --- |
+| Architecture | MDIBUS V18 nine-module mapping, six non-negotiable design rules | [`docs/02-architecture.md`](docs/02-architecture.md), [`docs/06-mdibus-blueprint.md`](docs/06-mdibus-blueprint.md) |
+| Core runtime | 26 TypeScript modules: ledger, orchestrator, invariants, authority, episode, trace | [`src/`](src/) |
+| Event model | BREAK 7 event types + ledger event taxonomy | [`src/types.ts`](src/types.ts), [`src/ledger.ts`](src/ledger.ts) |
+| CodeAgent layer | P0–P2 tools, 3 CLI variants (codeact / self-debug / qa-review), Jupyter-style Python kernel | [`src/code/v02.ts`](src/code/v02.ts) |
+| Tests | 74 unit / integration tests, all authored by MAGA2010 | [`tests/runtime.test.mjs`](tests/runtime.test.mjs), [`tests/break7.test.mjs`](tests/break7.test.mjs), [`tests/break7-v02.test.mjs`](tests/break7-v02.test.mjs) |
+| Research notes | 17 deep-study documents synthesizing Anthropic / OpenAI / DeepSeek / MDIBUS / CodeAgent literature | [`docs/01`](docs/01-papers.md)–[`docs/17`](docs/17-deep-study.md) |
+| CLI surface | `demo`, `episode`, `trace`, `tamper`, `codeagent` | [`src/cli.ts`](src/cli.ts) |
+
+### Citation
+
+If you use, reference, or build upon this work, please cite:
+
+> MAGA2010. *AI Time Run: An evidence-verified, event-sourced runtime for long-horizon autonomous agents.* 2026. MIT License. <https://github.com/MAGA2010/AI-time-run>
 
 ---
 
