@@ -545,8 +545,10 @@ ai-time-run tamper --store ./data
 
 ## 30-second quickstart
 
+Prerequisites: Node.js 20.9.0 or newer, npm, and Git.
+
 ```bash
-git clone https://github.com/MAGA2010/AI-time-run
+git clone https://github.com/MAGA2010/AI-time-run.git ai-time-run
 cd ai-time-run
 npm install
 npm run build
@@ -570,8 +572,10 @@ node dist/cli.js tamper --store ./data
 
 The demo runs four features and demonstrates authorized pass, approval gate,
 no-capability rejection, approval denial, failure attribution, and one
-constitutional revision. The expected output includes `64 events, VALID`,
-`harness level: H3`, and `responsibilities: 11/11 covered`.
+constitutional revision. Look for `VALID` in the ledger-integrity output.
+The demo also reports its event count, harness level, and responsibility
+coverage; these values reflect the current implementation and may change
+as the runtime evolves.
 
 ---
 
