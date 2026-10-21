@@ -566,9 +566,13 @@ node dist/cli.js episode --store ./data
 # Render a self-contained trace viewer (open data/trace.html in a browser)
 node dist/cli.js trace --store ./data
 
-# Show that forged events are rejected by the invariant layer
+# Show that forged events are rejected (expected exit status: 1)
 node dist/cli.js tamper --store ./data
 ```
+
+The `tamper` command intentionally exits with status `1` after reporting
+`forged validation: VIOLATIONS`. This demonstrates that forged events were
+rejected; it is an expected result, not a setup failure.
 
 The demo runs four features and demonstrates authorized pass, approval gate,
 no-capability rejection, approval denial, failure attribution, and one
